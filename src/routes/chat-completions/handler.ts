@@ -15,7 +15,7 @@ import {
 export async function handleCompletion(c: Context) {
   await checkRateLimit(state)
 
-  let payload = await c.req.json<ChatCompletionsPayload>()
+  const payload = await c.req.json<ChatCompletionsPayload>()
   consola.debug("Request payload:", JSON.stringify(payload).slice(-400))
 
   // Find the selected model
@@ -37,28 +37,34 @@ export async function handleCompletion(c: Context) {
 
   if (state.manualApprove) await awaitApproval()
 
-  // Normalize max_completion_tokens to max_tokens for upstream compatibility
+  // Normalize max_tokens to max_completion_tokens for newer models
   const payloadAny = payload as unknown as Record<string, unknown>
   if (
     payloadAny.max_completion_tokens !== null
     && payloadAny.max_completion_tokens !== undefined
-    && isNullish(payload.max_tokens)
   ) {
-    payload = {
-      ...payload,
-      max_tokens: payloadAny.max_completion_tokens as number,
-    }
-    delete (payload as unknown as Record<string, unknown>).max_completion_tokens
+    // max_completion_tokens already set — remove legacy max_tokens if present
+    delete (payload as unknown as Record<string, unknown>).max_tokens
     consola.debug(
-      "Normalized max_completion_tokens to max_tokens:",
-      payload.max_tokens,
+      "Using max_completion_tokens:",
+      payloadAny.max_completion_tokens,
     )
-  } else if (isNullish(payload.max_tokens)) {
-    payload = {
-      ...payload,
-      max_tokens: selectedModel?.capabilities.limits.max_output_tokens,
-    }
-    consola.debug("Set max_tokens to:", JSON.stringify(payload.max_tokens))
+  } else if (!isNullish(payload.max_tokens)) {
+    // Convert legacy max_tokens to max_completion_tokens
+    payloadAny.max_completion_tokens = payload.max_tokens
+    delete (payload as unknown as Record<string, unknown>).max_tokens
+    consola.debug(
+      "Normalized max_tokens to max_completion_tokens:",
+      payloadAny.max_completion_tokens,
+    )
+  } else {
+    // Neither set — use model default
+    payloadAny.max_completion_tokens =
+      selectedModel?.capabilities.limits.max_output_tokens
+    consola.debug(
+      "Set max_completion_tokens to:",
+      JSON.stringify(payloadAny.max_completion_tokens),
+    )
   }
 
   const response = await createChatCompletions(payload)
