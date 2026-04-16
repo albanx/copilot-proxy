@@ -10,16 +10,41 @@ import { pollAccessToken } from "~/services/github/poll-access-token"
 import { HTTPError } from "./error"
 import { state } from "./state"
 
+const MAX_RETRIES = 30
+const RETRY_DELAY_MS = 2000
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  label: string,
+  retries = MAX_RETRIES,
+): Promise<T> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      if (attempt === retries) throw error
+      const delay = RETRY_DELAY_MS
+      consola.warn(
+        `${label} failed (attempt ${attempt}/${retries}), retrying in ${delay}ms...`,
+      )
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+  throw new Error("Unreachable")
+}
+
 const readGithubToken = () => fs.readFile(PATHS.GITHUB_TOKEN_PATH, "utf8")
 
 const writeGithubToken = (token: string) =>
   fs.writeFile(PATHS.GITHUB_TOKEN_PATH, token)
 
 export const setupCopilotToken = async () => {
-  const { token, refresh_in } = await getCopilotToken()
+  const { token, refresh_in } = await withRetry(
+    () => getCopilotToken(),
+    "Initial Copilot token fetch",
+  )
   state.copilotToken = token
 
-  // Display the Copilot token to the screen
   consola.debug("GitHub Copilot Token fetched successfully!")
   if (state.showToken) {
     consola.info("Copilot token:", token)
@@ -29,15 +54,17 @@ export const setupCopilotToken = async () => {
   setInterval(async () => {
     consola.debug("Refreshing Copilot token")
     try {
-      const { token } = await getCopilotToken()
+      const { token } = await withRetry(
+        () => getCopilotToken(),
+        "Copilot token refresh",
+      )
       state.copilotToken = token
       consola.debug("Copilot token refreshed")
       if (state.showToken) {
         consola.info("Refreshed Copilot token:", token)
       }
     } catch (error) {
-      consola.error("Failed to refresh Copilot token:", error)
-      throw error
+      consola.error("Failed to refresh Copilot token after retries:", error)
     }
   }, refreshInterval)
 }
@@ -50,14 +77,17 @@ export async function setupGitHubToken(
   options?: SetupGitHubTokenOptions,
 ): Promise<void> {
   try {
-    const githubToken = await readGithubToken()
+    const githubToken = await withRetry(
+      () => readGithubToken(),
+      "Read GitHub token",
+    ).catch(() => null)
 
     if (githubToken && !options?.force) {
       state.githubToken = githubToken
       if (state.showToken) {
         consola.info("GitHub token:", githubToken)
       }
-      await logUser()
+      await withRetry(() => logUser(), "Fetch GitHub user")
 
       return
     }
@@ -77,7 +107,7 @@ export async function setupGitHubToken(
     if (state.showToken) {
       consola.info("GitHub token:", token)
     }
-    await logUser()
+    await withRetry(() => logUser(), "Fetch GitHub user")
   } catch (error) {
     if (error instanceof HTTPError) {
       consola.error("Failed to get GitHub token:", await error.response.json())
