@@ -8,6 +8,7 @@ import { copilotBaseUrl } from "~/lib/api-config"
 import { awaitApproval } from "~/lib/approval"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { state } from "~/lib/state"
+import { getTokenCount } from "~/lib/tokenizer"
 import {
   createChatCompletions,
   type ChatCompletionChunk,
@@ -35,6 +36,19 @@ export async function handleCompletion(c: Context) {
     JSON.stringify(openAIPayload),
   )
 
+  const selectedModel = state.models?.data.find(
+    (model) => model.id === openAIPayload.model,
+  )
+
+  let tokenCount: { input: number; output: number } | undefined
+  try {
+    if (selectedModel) {
+      tokenCount = await getTokenCount(openAIPayload, selectedModel)
+    }
+  } catch (error) {
+    consola.warn("Failed to calculate token count:", error)
+  }
+
   c.set("logInfo", {
     model: openAIPayload.model,
     sourceModel: anthropicPayload.model,
@@ -42,7 +56,13 @@ export async function handleCompletion(c: Context) {
     stream: openAIPayload.stream ?? false,
     messages: openAIPayload.messages.length,
     tools: openAIPayload.tools?.length ?? 0,
+    responseFormat:
+      openAIPayload.stream ? "sse" : (
+        (openAIPayload.response_format?.type ?? "json")
+      ),
     account: state.accountType,
+    inputTokens: tokenCount?.input,
+    outputTokens: tokenCount?.output,
   })
 
   if (state.manualApprove) {

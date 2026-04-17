@@ -9,7 +9,10 @@ export interface RequestLogInfo {
   stream?: boolean
   messages?: number
   tools?: number
+  responseFormat?: string
   account?: string
+  inputTokens?: number
+  outputTokens?: number
   note?: string
 }
 
@@ -28,33 +31,46 @@ const colorStatus = (status: number): string => {
 
 export const requestLogger = (): MiddlewareHandler => {
   return async (c, next) => {
+    const DIM = "\u001B[2m"
+    const CYAN = "\u001B[36m"
+    const BOLD = "\u001B[1m"
+    const RESET = "\u001B[0m"
+
+    const url = new URL(c.req.url)
+    const path = `${url.pathname}${url.search}`
+
+    consola.info(`${DIM}-->${RESET} ${c.req.method} ${path}`)
+
     const start = Date.now()
     await next()
     const durationMs = Date.now() - start
 
     const info: RequestLogInfo = c.get("logInfo") ?? {}
-    const parts: Array<string> = []
 
+    const params: Array<string> = []
     if (info.model) {
       const from =
         info.sourceModel && info.sourceModel !== info.model ?
-          `(from=${info.sourceModel})`
+          `${DIM}(${info.sourceModel})${RESET}`
         : ""
-      parts.push(`model=${info.model}${from}`)
+      params.push(`${BOLD}model${RESET}=${info.model}${from}`)
     }
-    if (info.stream !== undefined) parts.push(`stream=${info.stream}`)
-    if (info.messages !== undefined) parts.push(`messages=${info.messages}`)
-    if (info.tools !== undefined) parts.push(`tools=${info.tools}`)
-    if (info.upstream) parts.push(`upstream=${info.upstream}`)
-    if (info.account) parts.push(`account=${info.account}`)
-    if (info.note) parts.push(`note="${info.note}"`)
+    if (info.messages !== undefined) params.push(`msgs=${info.messages}`)
+    if (info.stream !== undefined) params.push(`stream=${info.stream}`)
+    if (info.responseFormat) params.push(`format=${info.responseFormat}`)
+    if (info.tools) params.push(`tools=${info.tools}`)
+    if (info.inputTokens !== undefined)
+      params.push(`tokens=${info.inputTokens}/${info.outputTokens ?? 0}`)
+    if (info.note) params.push(`note="${info.note}"`)
 
-    const url = new URL(c.req.url)
-    const path = `${url.pathname}${url.search}`
-    const extras = parts.length > 0 ? ` ${parts.join(" ")}` : ""
+    const duration = `${DIM}${durationMs}ms${RESET}`
+    const upstream =
+      info.upstream ? ` ${DIM}→${RESET} ${CYAN}${info.upstream}${RESET}` : ""
+    const paramsStr =
+      params.length > 0 ? `  ${DIM}|${RESET}  ${params.join("  ")}` : ""
 
     consola.info(
-      `${c.req.method} ${path} ${colorStatus(c.res.status)} ${durationMs}ms${extras}`,
+      `${DIM}<--${RESET} ${c.req.method} ${path} ${colorStatus(c.res.status)} ${duration}${upstream}${paramsStr}`,
     )
   }
 }
