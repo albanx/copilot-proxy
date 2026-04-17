@@ -27,7 +27,7 @@ interface RunServerOptions {
   proxyEnv: boolean
 }
 
-export async function runServer(options: RunServerOptions): Promise<void> {
+async function runServer(options: RunServerOptions): Promise<void> {
   if (options.proxyEnv) {
     initProxyFromEnv()
   }
@@ -37,9 +37,12 @@ export async function runServer(options: RunServerOptions): Promise<void> {
     consola.info("Verbose logging enabled")
   }
 
-  state.accountType = options.accountType
-  if (options.accountType !== "individual") {
-    consola.info(`Using ${options.accountType} plan GitHub account`)
+  if (options.accountType === "auto") {
+    state.accountTypeAuto = true
+  } else {
+    state.accountTypeAuto = false
+    state.accountType = options.accountType
+    consola.info(`Using ${options.accountType} plan GitHub account (forced)`)
   }
 
   state.manualApprove = options.manual
@@ -110,9 +113,7 @@ export async function runServer(options: RunServerOptions): Promise<void> {
     }
   }
 
-  consola.box(
-    `🌐 Usage Viewer: https://ericc-ch.github.io/copilot-api?endpoint=${serverUrl}/usage`,
-  )
+  consola.info(`Listening on ${serverUrl}`)
 
   serve({
     fetch: server.fetch as ServerHandler,
@@ -146,8 +147,9 @@ export const start = defineCommand({
     "account-type": {
       alias: "a",
       type: "string",
-      default: "individual",
-      description: "Account type to use (individual, business, enterprise)",
+      default: "auto",
+      description:
+        "Account type: auto (detect from token), individual, business, or enterprise",
     },
     manual: {
       type: "boolean",

@@ -200,15 +200,6 @@ These endpoints are designed to be compatible with the Anthropic Messages API.
 | `POST /v1/messages`              | `POST` | Creates a model response for a given conversation.           |
 | `POST /v1/messages/count_tokens` | `POST` | Calculates the number of tokens for a given set of messages. |
 
-### Usage Monitoring Endpoints
-
-New endpoints for monitoring your Copilot usage and quotas.
-
-| Endpoint     | Method | Description                                                  |
-| ------------ | ------ | ------------------------------------------------------------ |
-| `GET /usage` | `GET`  | Get detailed Copilot usage statistics and quota information. |
-| `GET /token` | `GET`  | Get the current Copilot token being used by the API.         |
-
 ## Example Usage
 
 Using with npx:
@@ -244,39 +235,9 @@ npx copilot-api@latest auth
 # Run auth flow with verbose logging
 npx copilot-api@latest auth --verbose
 
-# Show your Copilot usage/quota in the terminal (no server needed)
-npx copilot-api@latest check-usage
-
-# Display debug information for troubleshooting
-npx copilot-api@latest debug
-
-# Display debug information in JSON format
-npx copilot-api@latest debug --json
-
 # Initialize proxy from environment variables (HTTP_PROXY, HTTPS_PROXY, etc.)
 npx copilot-api@latest start --proxy-env
 ```
-
-## Using the Usage Viewer
-
-After starting the server, a URL to the Copilot Usage Dashboard will be displayed in your console. This dashboard is a web interface for monitoring your API usage.
-
-1.  Start the server. For example, using npx:
-    ```sh
-    npx copilot-api@latest start
-    ```
-2.  The server will output a URL to the usage viewer. Copy and paste this URL into your browser. It will look something like this:
-    `https://ericc-ch.github.io/copilot-api?endpoint=http://localhost:4141/usage`
-    - If you use the `start.bat` script on Windows, this page will open automatically.
-
-The dashboard provides a user-friendly interface to view your Copilot usage data:
-
-- **API Endpoint URL**: The dashboard is pre-configured to fetch data from your local server endpoint via the URL query parameter. You can change this URL to point to any other compatible API endpoint.
-- **Fetch Data**: Click the "Fetch" button to load or refresh the usage data. The dashboard will automatically fetch data on load.
-- **Usage Quotas**: View a summary of your usage quotas for different services like Chat and Completions, displayed with progress bars for a quick overview.
-- **Detailed Information**: See the full JSON response from the API for a detailed breakdown of all available usage statistics.
-- **URL-based Configuration**: You can also specify the API endpoint directly in the URL using a query parameter. This is useful for bookmarks or sharing links. For example:
-  `https://ericc-ch.github.io/copilot-api?endpoint=http://your-api-server/usage`
 
 ## Using with Claude Code
 

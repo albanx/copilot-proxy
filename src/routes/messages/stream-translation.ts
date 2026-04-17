@@ -178,13 +178,3 @@ export function translateChunkToAnthropicEvents(
 
   return events
 }
-
-export function translateErrorToAnthropicErrorEvent(): AnthropicStreamEventData {
-  return {
-    type: "error",
-    error: {
-      type: "api_error",
-      message: "An unexpected error occurred during streaming.",
-    },
-  }
-}

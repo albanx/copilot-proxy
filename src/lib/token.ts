@@ -39,34 +39,73 @@ const writeGithubToken = (token: string) =>
   fs.writeFile(PATHS.GITHUB_TOKEN_PATH, token)
 
 export const setupCopilotToken = async () => {
-  const { token, refresh_in } = await withRetry(
+  const tokenResponse = await withRetry(
     () => getCopilotToken(),
     "Initial Copilot token fetch",
   )
-  state.copilotToken = token
+  state.copilotToken = tokenResponse.token
+  applyAccountTypeFromToken(tokenResponse)
 
   consola.debug("GitHub Copilot Token fetched successfully!")
   if (state.showToken) {
-    consola.info("Copilot token:", token)
+    consola.info("Copilot token:", tokenResponse.token)
   }
 
-  const refreshInterval = (refresh_in - 60) * 1000
+  const refreshInterval = (tokenResponse.refresh_in - 60) * 1000
   setInterval(async () => {
     consola.debug("Refreshing Copilot token")
     try {
-      const { token } = await withRetry(
+      const refreshed = await withRetry(
         () => getCopilotToken(),
         "Copilot token refresh",
       )
-      state.copilotToken = token
+      state.copilotToken = refreshed.token
+      applyAccountTypeFromToken(refreshed)
       consola.debug("Copilot token refreshed")
       if (state.showToken) {
-        consola.info("Refreshed Copilot token:", token)
+        consola.info("Refreshed Copilot token:", refreshed.token)
       }
     } catch (error) {
       consola.error("Failed to refresh Copilot token after retries:", error)
     }
   }, refreshInterval)
+}
+
+function applyAccountTypeFromToken(token: {
+  endpoints?: { api?: string }
+  sku?: string
+}) {
+  if (!state.accountTypeAuto) return
+
+  const detected = detectAccountType(token)
+  if (detected && detected !== state.accountType) {
+    consola.info(
+      `Auto-detected account type: ${detected}${token.sku ? ` (sku=${token.sku})` : ""}`,
+    )
+    state.accountType = detected
+  }
+}
+
+function detectAccountType(token: {
+  endpoints?: { api?: string }
+  sku?: string
+}): string | undefined {
+  const api = token.endpoints?.api
+  if (api) {
+    try {
+      const host = new URL(api).hostname
+      const match = /^api\.(.+)\.githubcopilot\.com$/.exec(host)
+      if (match) return match[1]
+      if (host === "api.githubcopilot.com") return "individual"
+    } catch {
+      /* ignore invalid URL */
+    }
+  }
+  const sku = token.sku?.toLowerCase() ?? ""
+  if (sku.includes("enterprise")) return "enterprise"
+  if (sku.includes("business")) return "business"
+  if (sku) return "individual"
+  return undefined
 }
 
 interface SetupGitHubTokenOptions {

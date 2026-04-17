@@ -17,6 +17,13 @@ export async function handleCountTokens(c: Context) {
 
     const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
 
+    c.set("logInfo", {
+      model: anthropicPayload.model,
+      upstream: "count_tokens (local)",
+      messages: anthropicPayload.messages.length,
+      account: state.accountType,
+    })
+
     const openAIPayload = translateToOpenAI(anthropicPayload)
 
     const selectedModel = state.models?.data.find(

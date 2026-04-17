@@ -20,4 +20,11 @@ interface GetCopilotTokenResponse {
   expires_at: number
   refresh_in: number
   token: string
+  sku?: string
+  endpoints?: {
+    api?: string
+    "origin-tracker"?: string
+    proxy?: string
+    telemetry?: string
+  }
 }

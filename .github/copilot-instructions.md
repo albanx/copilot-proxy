@@ -59,7 +59,3 @@ When changing Anthropic behavior, update both stream and non-stream paths and ru
 - **CLI flags**: add new flags in the relevant `src/<command>.ts` using citty's `args`, then push the value into `state` before `server.listen`. Don't read `process.argv` directly.
 - **Tests**: Bun test runner, files named `*.test.ts` in `tests/` at repo root (not colocated). Import from `bun:test`.
 - **Dual routing**: when adding a new OpenAI-shaped endpoint, mount it both at `/<path>` and `/v1/<path>` in `src/server.ts` to preserve client compatibility.
-
-## Pages dashboard
-
-`pages/` hosts the static usage-viewer UI served at `/usage` via `src/routes/usage/`. It's plain HTML/JS with no build step — edit files directly.
