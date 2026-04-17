@@ -4,6 +4,7 @@ import consola from "consola"
 import { events } from "fetch-event-stream"
 import { streamSSE } from "hono/streaming"
 
+import { copilotBaseUrl } from "~/lib/api-config"
 import { awaitApproval } from "~/lib/approval"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { state } from "~/lib/state"
@@ -33,6 +34,16 @@ export async function handleCompletion(c: Context) {
     "Translated OpenAI request payload:",
     JSON.stringify(openAIPayload),
   )
+
+  c.set("logInfo", {
+    model: openAIPayload.model,
+    sourceModel: anthropicPayload.model,
+    upstream: `${copilotBaseUrl(state)}/chat/completions`,
+    stream: openAIPayload.stream ?? false,
+    messages: openAIPayload.messages.length,
+    tools: openAIPayload.tools?.length ?? 0,
+    account: state.accountType,
+  })
 
   if (state.manualApprove) {
     await awaitApproval()

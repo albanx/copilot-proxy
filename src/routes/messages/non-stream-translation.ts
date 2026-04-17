@@ -46,13 +46,53 @@ export function translateToOpenAI(
   }
 }
 
-function translateModelName(model: string): string {
-  // Subagent requests use a specific model number which Copilot doesn't support
-  if (model.startsWith("claude-sonnet-4-")) {
-    return model.replace(/^claude-sonnet-4-.*/, "claude-sonnet-4")
-  } else if (model.startsWith("claude-opus-")) {
-    return model.replace(/^claude-opus-4-.*/, "claude-opus-4")
+/**
+ * Translates an Anthropic-style model identifier (as sent by Claude Code) into
+ * the GitHub Copilot model ID format.
+ *
+ * Anthropic canonical IDs use dashes for the version and an optional date
+ * suffix (e.g. `claude-sonnet-4-5-20250929`, `claude-opus-4-1-20250805`,
+ * `claude-haiku-4-5-20251001`). Copilot uses dotted versions without a date
+ * suffix (e.g. `claude-sonnet-4.5`, `claude-opus-4.1`, `claude-haiku-4.5`).
+ *
+ * Rules:
+ * - Pass through any model id that already contains a dot — callers may
+ *   already specify a Copilot-native id (e.g. `claude-sonnet-4.5`).
+ * - Strip a trailing `-YYYYMMDD` date suffix.
+ * - Handle the new `claude-<family>-<major>[-<minor>]` shape.
+ * - Handle the legacy `claude-<major>-<minor>-<family>` shape (e.g.
+ *   `claude-3-5-sonnet`).
+ * - Otherwise return the original id unchanged and let Copilot decide.
+ */
+export function translateModelName(model: string): string {
+  // Already a Copilot-style id (e.g. "claude-sonnet-4.5", "gpt-4.1"): pass
+  // through untouched.
+  if (model.includes(".")) {
+    return model
   }
+
+  // Strip trailing date stamp: "-20250929".
+  const withoutDate = model.replace(/-\d{8}$/, "")
+
+  // New Anthropic shape: claude-<family>-<major>[-<minor>].
+  const newShape = /^claude-(sonnet|opus|haiku)-(\d+)(?:-(\d+))?$/.exec(
+    withoutDate,
+  )
+  if (newShape) {
+    const [, family, major, minor] = newShape
+    const version = minor ? `${major}.${minor}` : major
+    return `claude-${family}-${version}`
+  }
+
+  // Legacy Anthropic shape: claude-<major>-<minor>-<family>.
+  const legacyShape = /^claude-(\d+)-(\d+)-(sonnet|opus|haiku)$/.exec(
+    withoutDate,
+  )
+  if (legacyShape) {
+    const [, major, minor, family] = legacyShape
+    return `claude-${family}-${major}.${minor}`
+  }
+
   return model
 }
 

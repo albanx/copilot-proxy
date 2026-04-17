@@ -2,6 +2,7 @@ import type { Context } from "hono"
 
 import consola from "consola"
 
+import { copilotBaseUrl } from "~/lib/api-config"
 import { awaitApproval } from "~/lib/approval"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { state } from "~/lib/state"
@@ -17,6 +18,15 @@ export async function handleCompletion(c: Context) {
 
   const payload = await c.req.json<ChatCompletionsPayload>()
   consola.debug("Request payload:", JSON.stringify(payload).slice(-400))
+
+  c.set("logInfo", {
+    model: payload.model,
+    upstream: `${copilotBaseUrl(state)}/chat/completions`,
+    stream: payload.stream ?? false,
+    messages: payload.messages.length,
+    tools: payload.tools?.length ?? 0,
+    account: state.accountType,
+  })
 
   // Find the selected model
   const selectedModel = state.models?.data.find(
