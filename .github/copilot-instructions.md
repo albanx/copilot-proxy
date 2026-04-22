@@ -10,7 +10,7 @@ All scripts use Bun, not Node/npm.
 - Dev (watch): `bun run dev`
 - Build: `bun run build` (tsdown → `dist/main.js`)
 - Start prod: `bun run start`
-- Lint: `bun run lint` (ESLint w/ `@echristian/eslint-config`; uses cache)
+- Lint: `bun run lint` (ESLint flat config with `@eslint/js` + `typescript-eslint` + `eslint-config-prettier`; uses cache)
 - Lint whole repo: `bun run lint:all`
 - Typecheck: `bun run typecheck` (`tsc` — `noEmit`)
 - Dead-code check: `bun run knip`

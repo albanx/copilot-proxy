@@ -1,7 +1,12 @@
-import config from "@echristian/eslint-config"
+import js from "@eslint/js"
+import prettier from "eslint-config-prettier"
+import tseslint from "typescript-eslint"
 
-export default config({
-  prettier: {
-    plugins: ["prettier-plugin-packagejson"],
+export default tseslint.config(
+  {
+    ignores: ["dist/**", "node_modules/**"],
   },
-})
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  prettier,
+)

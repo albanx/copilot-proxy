@@ -111,7 +111,7 @@ tests/                          # *.test.ts at repo root, NOT colocated
 - **CLI flags**: add via citty `args` in `src/start.ts` (or `auth.ts`), then push to `state` before `serve()`. Don't read `process.argv` directly.
 - **Proxy**: `--proxy-env` wires `HTTP(S)_PROXY` via `proxy-from-env` + `undici`. Use `undici`'s fetch (not global) for upstream calls if proxy support matters.
 - **Style**: only comment code that needs clarification; otherwise let code speak.
-- **Linting**: `@echristian/eslint-config` covers stylistic, unused-imports, regex, and package.json rules.
+- **Linting**: standard ESLint flat config (`@eslint/js` recommended + `typescript-eslint` recommended + `eslint-config-prettier`). Formatting via plain `prettier` with a minimal `.prettierrc.json`.
 
 ## Anthropic translation (most complex area)
 
