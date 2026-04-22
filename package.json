@@ -1,5 +1,5 @@
 {
-  "name": "copx",
+  "name": "copilot-bridge",
   "version": "1.0.0",
   "description": "Turn GitHub Copilot into OpenAI/Anthropic API compatible server. Usable with Claude Code!",
   "keywords": [
@@ -15,6 +15,7 @@
   },
   "type": "module",
   "bin": {
+    "copilot-bridge": "./dist/main.js",
     "copx": "./dist/main.js"
   },
   "files": [
@@ -28,7 +29,7 @@
     "lint:all": "eslint --cache .",
     "prepack": "bun run build",
     "prepare": "simple-git-hooks",
-    "release": "bumpp && bun publish --access public",
+    "release": "bumpp && bun publish",
     "start": "NODE_ENV=production bun run ./src/main.ts",
     "typecheck": "tsc"
   },

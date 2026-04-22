@@ -17,7 +17,7 @@ A local proxy that exposes GitHub Copilot as **OpenAI-compatible** (`/v1/chat/co
 The fastest way to run the proxy — no clone required:
 
 ```sh
-npx copx@latest start
+npx copilot-bridge@latest start
 ```
 
 On first run you'll be prompted to authenticate with GitHub via device-code flow. The server then listens on `http://localhost:4141`.
@@ -25,12 +25,12 @@ On first run you'll be prompted to authenticate with GitHub via device-code flow
 Useful flags:
 
 ```sh
-npx copx start --port 8080                  # custom port
-npx copx start --account-type business      # force business / enterprise (default: auto-detect)
-npx copx start --rate-limit 30 --wait       # throttle requests
-npx copx start --manual                     # approve each request
-npx copx start --github-token ghp_...       # non-interactive auth
-npx copx auth                               # only mint a GitHub token
+npx copilot-bridge start --port 8080                  # custom port
+npx copilot-bridge start --account-type business      # force business / enterprise (default: auto-detect)
+npx copilot-bridge start --rate-limit 30 --wait       # throttle requests
+npx copilot-bridge start --manual                     # approve each request
+npx copilot-bridge start --github-token ghp_...       # non-interactive auth
+npx copilot-bridge auth                               # only mint a GitHub token
 ```
 
 ## From source
@@ -95,7 +95,7 @@ To pin a specific model instead, add `"ANTHROPIC_MODEL": "claude-opus-4.6"` (or 
 Or use the interactive helper, which prompts for models and copies the full launch command to your clipboard:
 
 ```sh
-npx copx start --claude-code
+npx copilot-bridge start --claude-code
 ```
 
 ## CLI options (`start`)
