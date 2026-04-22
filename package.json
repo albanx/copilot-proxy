@@ -1,5 +1,5 @@
 {
-  "name": "copilotx",
+  "name": "@albanx/cpx",
   "version": "1.0.2",
   "description": "Turn GitHub Copilot into OpenAI/Anthropic API compatible server. Usable with Claude Code!",
   "keywords": [
@@ -15,7 +15,7 @@
   },
   "type": "module",
   "bin": {
-    "copilotx": "./dist/main.js"
+    "cpx": "./dist/main.js"
   },
   "files": [
     "dist"
