@@ -1,312 +1,156 @@
 # Copilot API Proxy
 
 > [!WARNING]
-> This is a reverse-engineered proxy of GitHub Copilot API. It is not supported by GitHub, and may break unexpectedly. Use at your own risk.
-
-> [!WARNING]
-> **GitHub Security Notice:**  
-> Excessive automated or scripted use of Copilot (including rapid or bulk requests, such as via automated tools) may trigger GitHub's abuse-detection systems.  
-> You may receive a warning from GitHub Security, and further anomalous activity could result in temporary suspension of your Copilot access.
+> Reverse-engineered proxy of the GitHub Copilot API. Not supported by GitHub and may break unexpectedly. Excessive automated use may trigger GitHub's abuse detection and risk your Copilot access. Use responsibly.
 >
-> GitHub prohibits use of their servers for excessive automated bulk activity or any activity that places undue burden on their infrastructure.
->
-> Please review:
->
-> - [GitHub Acceptable Use Policies](https://docs.github.com/site-policy/acceptable-use-policies/github-acceptable-use-policies#4-spam-and-inauthentic-activity-on-github)
-> - [GitHub Copilot Terms](https://docs.github.com/site-policy/github-terms/github-terms-for-additional-products-and-features#github-copilot)
->
-> Use this proxy responsibly to avoid account restrictions.
+> See: [GitHub Acceptable Use Policies](https://docs.github.com/site-policy/acceptable-use-policies/github-acceptable-use-policies) · [GitHub Copilot Terms](https://docs.github.com/site-policy/github-terms/github-terms-for-additional-products-and-features#github-copilot)
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E519XS7W)
-
----
-
-**Note:** If you are using [opencode](https://github.com/sst/opencode), you do not need this project. Opencode supports GitHub Copilot provider out of the box.
-
----
-
-## Project Overview
-
-A reverse-engineered proxy for the GitHub Copilot API that exposes it as an OpenAI and Anthropic compatible service. This allows you to use GitHub Copilot with any tool that supports the OpenAI Chat Completions API or the Anthropic Messages API, including to power [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
-
-## Features
-
-- **OpenAI & Anthropic Compatibility**: Exposes GitHub Copilot as an OpenAI-compatible (`/v1/chat/completions`, `/v1/models`, `/v1/embeddings`) and Anthropic-compatible (`/v1/messages`) API.
-- **Claude Code Integration**: Easily configure and launch [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) to use Copilot as its backend with a simple command-line flag (`--claude-code`).
-- **Usage Dashboard**: A web-based dashboard to monitor your Copilot API usage, view quotas, and see detailed statistics.
-- **Rate Limit Control**: Manage API usage with rate-limiting options (`--rate-limit`) and a waiting mechanism (`--wait`) to prevent errors from rapid requests.
-- **Manual Request Approval**: Manually approve or deny each API request for fine-grained control over usage (`--manual`).
-- **Token Visibility**: Option to display GitHub and Copilot tokens during authentication and refresh for debugging (`--show-token`).
-- **Flexible Authentication**: Authenticate interactively or provide a GitHub token directly, suitable for CI/CD environments.
-- **Support for Different Account Types**: Works with individual, business, and enterprise GitHub Copilot plans.
-
-## Demo
-
-https://github.com/user-attachments/assets/7654b383-669d-4eb9-b23c-06d7aefee8c5
+A local proxy that exposes GitHub Copilot as **OpenAI-compatible** (`/v1/chat/completions`, `/v1/models`, `/v1/embeddings`) and **Anthropic-compatible** (`/v1/messages`, `/v1/messages/count_tokens`) endpoints. Use Copilot as a backend for any tool that speaks either API — including [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview).
 
 ## Prerequisites
 
-- Bun (>= 1.2.x)
+- [Bun](https://bun.sh) >= 1.2.x
 - GitHub account with Copilot subscription (individual, business, or enterprise)
 
-## Installation
+## Setup
 
-To install dependencies, run:
+### 1. Install dependencies
+
+Clone the repo and install:
 
 ```sh
+git clone https://github.com/albanx/copilot-api.git
+cd copilot-api
 bun install
 ```
 
-## Using with Docker
+### 2. Run the proxy
 
-Build image
-
-```sh
-docker build -t copilot-api .
-```
-
-Run the container
-
-```sh
-# Create a directory on your host to persist the GitHub token and related data
-mkdir -p ./copilot-data
-
-# Run the container with a bind mount to persist the token
-# This ensures your authentication survives container restarts
-
-docker run -p 4141:4141 -v $(pwd)/copilot-data:/root/.local/share/copilot-api copilot-api
-```
-
-> **Note:**
-> The GitHub token and related data will be stored in `copilot-data` on your host. This is mapped to `/root/.local/share/copilot-api` inside the container, ensuring persistence across restarts.
-
-### Docker with Environment Variables
-
-You can pass the GitHub token directly to the container using environment variables:
-
-```sh
-# Build with GitHub token
-docker build --build-arg GH_TOKEN=your_github_token_here -t copilot-api .
-
-# Run with GitHub token
-docker run -p 4141:4141 -e GH_TOKEN=your_github_token_here copilot-api
-
-# Run with additional options
-docker run -p 4141:4141 -e GH_TOKEN=your_token copilot-api start --verbose --port 4141
-```
-
-### Docker Compose Example
-
-```yaml
-version: "3.8"
-services:
-  copilot-api:
-    build: .
-    ports:
-      - "4141:4141"
-    environment:
-      - GH_TOKEN=your_github_token_here
-    restart: unless-stopped
-```
-
-The Docker image includes:
-
-- Multi-stage build for optimized image size
-- Non-root user for enhanced security
-- Health check for container monitoring
-- Pinned base image version for reproducible builds
-
-## Using with npx
-
-You can run the project directly using npx:
-
-```sh
-npx copilot-api@latest start
-```
-
-With options:
-
-```sh
-npx copilot-api@latest start --port 8080
-```
-
-For authentication only:
-
-```sh
-npx copilot-api@latest auth
-```
-
-## Command Structure
-
-Copilot API now uses a subcommand structure with these main commands:
-
-- `start`: Start the Copilot API server. This command will also handle authentication if needed.
-- `auth`: Run GitHub authentication flow without starting the server. This is typically used if you need to generate a token for use with the `--github-token` option, especially in non-interactive environments.
-- `check-usage`: Show your current GitHub Copilot usage and quota information directly in the terminal (no server required).
-- `debug`: Display diagnostic information including version, runtime details, file paths, and authentication status. Useful for troubleshooting and support.
-
-## Command Line Options
-
-### Start Command Options
-
-The following command line options are available for the `start` command:
-
-| Option         | Description                                                                   | Default    | Alias |
-| -------------- | ----------------------------------------------------------------------------- | ---------- | ----- |
-| --port         | Port to listen on                                                             | 4141       | -p    |
-| --verbose      | Enable verbose logging                                                        | false      | -v    |
-| --account-type | Account type to use (individual, business, enterprise)                        | individual | -a    |
-| --manual       | Enable manual request approval                                                | false      | none  |
-| --rate-limit   | Rate limit in seconds between requests                                        | none       | -r    |
-| --wait         | Wait instead of error when rate limit is hit                                  | false      | -w    |
-| --github-token | Provide GitHub token directly (must be generated using the `auth` subcommand) | none       | -g    |
-| --claude-code  | Generate a command to launch Claude Code with Copilot API config              | false      | -c    |
-| --show-token   | Show GitHub and Copilot tokens on fetch and refresh                           | false      | none  |
-| --proxy-env    | Initialize proxy from environment variables                                   | false      | none  |
-
-### Auth Command Options
-
-| Option       | Description               | Default | Alias |
-| ------------ | ------------------------- | ------- | ----- |
-| --verbose    | Enable verbose logging    | false   | -v    |
-| --show-token | Show GitHub token on auth | false   | none  |
-
-### Debug Command Options
-
-| Option | Description               | Default | Alias |
-| ------ | ------------------------- | ------- | ----- |
-| --json | Output debug info as JSON | false   | none  |
-
-## API Endpoints
-
-The server exposes several endpoints to interact with the Copilot API. It provides OpenAI-compatible endpoints and now also includes support for Anthropic-compatible endpoints, allowing for greater flexibility with different tools and services.
-
-### OpenAI Compatible Endpoints
-
-These endpoints mimic the OpenAI API structure.
-
-| Endpoint                    | Method | Description                                               |
-| --------------------------- | ------ | --------------------------------------------------------- |
-| `POST /v1/chat/completions` | `POST` | Creates a model response for the given chat conversation. |
-| `GET /v1/models`            | `GET`  | Lists the currently available models.                     |
-| `POST /v1/embeddings`       | `POST` | Creates an embedding vector representing the input text.  |
-
-### Anthropic Compatible Endpoints
-
-These endpoints are designed to be compatible with the Anthropic Messages API.
-
-| Endpoint                         | Method | Description                                                  |
-| -------------------------------- | ------ | ------------------------------------------------------------ |
-| `POST /v1/messages`              | `POST` | Creates a model response for a given conversation.           |
-| `POST /v1/messages/count_tokens` | `POST` | Calculates the number of tokens for a given set of messages. |
-
-## Example Usage
-
-Using with npx:
-
-```sh
-# Basic usage with start command
-npx copilot-api@latest start
-
-# Run on custom port with verbose logging
-npx copilot-api@latest start --port 8080 --verbose
-
-# Use with a business plan GitHub account
-npx copilot-api@latest start --account-type business
-
-# Use with an enterprise plan GitHub account
-npx copilot-api@latest start --account-type enterprise
-
-# Enable manual approval for each request
-npx copilot-api@latest start --manual
-
-# Set rate limit to 30 seconds between requests
-npx copilot-api@latest start --rate-limit 30
-
-# Wait instead of error when rate limit is hit
-npx copilot-api@latest start --rate-limit 30 --wait
-
-# Provide GitHub token directly
-npx copilot-api@latest start --github-token ghp_YOUR_TOKEN_HERE
-
-# Run only the auth flow
-npx copilot-api@latest auth
-
-# Run auth flow with verbose logging
-npx copilot-api@latest auth --verbose
-
-# Initialize proxy from environment variables (HTTP_PROXY, HTTPS_PROXY, etc.)
-npx copilot-api@latest start --proxy-env
-```
-
-## Using with Claude Code
-
-This proxy can be used to power [Claude Code](https://docs.anthropic.com/en/claude-code), an experimental conversational AI assistant for developers from Anthropic.
-
-There are two ways to configure Claude Code to use this proxy:
-
-### Interactive Setup with `--claude-code` flag
-
-To get started, run the `start` command with the `--claude-code` flag:
-
-```sh
-npx copilot-api@latest start --claude-code
-```
-
-You will be prompted to select a primary model and a "small, fast" model for background tasks. After selecting the models, a command will be copied to your clipboard. This command sets the necessary environment variables for Claude Code to use the proxy.
-
-Paste and run this command in a new terminal to launch Claude Code.
-
-### Manual Configuration with `settings.json`
-
-Alternatively, you can configure Claude Code by creating a `.claude/settings.json` file in your project's root directory. This file should contain the environment variables needed by Claude Code. This way you don't need to run the interactive setup every time.
-
-Here is an example `.claude/settings.json` file:
-
-```json
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "http://localhost:4141",
-    "ANTHROPIC_AUTH_TOKEN": "dummy",
-    "ANTHROPIC_MODEL": "gpt-4.1",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-4.1",
-    "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4.1",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-4.1",
-    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1",
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
-  },
-  "permissions": {
-    "deny": [
-      "WebSearch"
-    ]
-  }
-}
-```
-
-You can find more options here: [Claude Code settings](https://docs.anthropic.com/en/docs/claude-code/settings#environment-variables)
-
-You can also read more about IDE integration here: [Add Claude Code to your IDE](https://docs.anthropic.com/en/docs/claude-code/ide-integrations)
-
-## Running from Source
-
-The project can be run from source in several ways:
-
-### Development Mode
+For development (watch mode):
 
 ```sh
 bun run dev
 ```
 
-### Production Mode
+For production:
 
 ```sh
+bun run build
 bun run start
 ```
 
-## Usage Tips
+On first run you'll be prompted to authenticate with GitHub via device-code flow. The server then listens on `http://localhost:4141`.
 
-- To avoid hitting GitHub Copilot's rate limits, you can use the following flags:
-  - `--manual`: Enables manual approval for each request, giving you full control over when requests are sent.
-  - `--rate-limit <seconds>`: Enforces a minimum time interval between requests. For example, `copilot-api start --rate-limit 30` will ensure there's at least a 30-second gap between requests.
-  - `--wait`: Use this with `--rate-limit`. It makes the server wait for the cooldown period to end instead of rejecting the request with an error. This is useful for clients that don't automatically retry on rate limit errors.
-- If you have a GitHub business or enterprise plan account with Copilot, use the `--account-type` flag (e.g., `--account-type business`). See the [official documentation](https://docs.github.com/en/enterprise-cloud@latest/copilot/managing-copilot/managing-github-copilot-in-your-organization/managing-access-to-github-copilot-in-your-organization/managing-github-copilot-access-to-your-organizations-network#configuring-copilot-subscription-based-network-routing-for-your-enterprise-or-organization) for more details.
+The `dev` and `start` scripts pass through any flags. Useful examples:
+
+```sh
+bun run start -- --port 8080                  # custom port
+bun run start -- --account-type business      # force business / enterprise (default: auto-detect)
+bun run start -- --rate-limit 30 --wait       # throttle requests
+bun run start -- --manual                     # approve each request
+bun run start -- --github-token ghp_...       # non-interactive auth
+```
+
+Auth only (e.g. for CI to mint a token for `--github-token`):
+
+```sh
+bun run dist/main.js auth
+```
+
+### 3. Use with Claude Code
+
+With the proxy running, set these environment variables in the terminal where you launch Claude Code:
+
+```sh
+export ANTHROPIC_AUTH_TOKEN="llstudio"
+export ANTHROPIC_API_KEY=""
+export ANTHROPIC_BASE_URL="http://localhost:4141"
+```
+
+Then start Claude Code as usual. It will route all requests through the proxy to Copilot.
+
+#### Switching models from inside Claude Code
+
+If you only want to use Anthropic-family models (sonnet, opus, haiku), **don't** set `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, or `ANTHROPIC_DEFAULT_HAIKU_MODEL`. With those unset, Claude Code uses its built-in defaults and the `/model` command works natively — pick sonnet/opus/haiku and the proxy translates the ID to Copilot's matching model (e.g. `claude-sonnet-4-5` → `claude-sonnet-4.5`).
+
+Only pin a model via env vars or `settings.json` if you want to lock to a specific Copilot model (including non-Anthropic ones like `gpt-4.1`, `gpt-5`), since Claude Code's `/model` picker doesn't list those.
+
+#### Optional: configure via `settings.json`
+
+To persist config across sessions, put it in Claude Code's settings file:
+
+- Windows: `C:\Users\<USER>\.claude\settings.json`
+- macOS / Linux: `~/.claude/settings.json`
+
+Sample (Anthropic-only, lets `/model` switch freely):
+
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "lmstudio",
+    "ANTHROPIC_BASE_URL": "http://localhost:4141",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_USE_POWERSHELL_TOOL": "1",
+    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1"
+  },
+  "forceLoginMethod": "console",
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "xhigh",
+  "autoUpdatesChannel": "latest",
+  "skipDangerousModePermissionPrompt": true
+}
+```
+
+To pin a specific model instead, add `"ANTHROPIC_MODEL": "claude-opus-4.6"` (or any ID returned by `GET /v1/models`) inside `env`.
+
+Or use the interactive helper, which prompts for models and copies the full launch command to your clipboard:
+
+```sh
+bun run start -- --claude-code
+```
+
+## CLI options (`start`)
+
+| Option           | Description                                                    | Default      | Alias |
+| ---------------- | -------------------------------------------------------------- | ------------ | ----- |
+| `--port`         | Port to listen on                                              | `4141`       | `-p`  |
+| `--verbose`      | Verbose logging                                                | `false`      | `-v`  |
+| `--account-type` | `auto`, `individual`, `business`, or `enterprise`              | `auto`       | `-a`  |
+| `--manual`       | Approve each request manually                                  | `false`      |       |
+| `--rate-limit`   | Minimum seconds between requests                               | none         | `-r`  |
+| `--wait`         | Wait on rate limit instead of erroring                         | `false`      | `-w`  |
+| `--github-token` | Provide GitHub token directly                                  | none         | `-g`  |
+| `--claude-code`  | Print/copy a Claude Code launch command after model selection  | `false`      | `-c`  |
+| `--show-token`   | Print GitHub/Copilot tokens on fetch + refresh                 | `false`      |       |
+| `--proxy-env`    | Read `HTTP_PROXY`/`HTTPS_PROXY` from env                       | `false`      |       |
+
+## API endpoints
+
+OpenAI-compatible:
+
+| Endpoint                    | Method | Description                                 |
+| --------------------------- | ------ | ------------------------------------------- |
+| `/v1/chat/completions`      | POST   | Chat completion (streaming + non-stream)    |
+| `/v1/models`                | GET    | List available Copilot models               |
+| `/v1/embeddings`            | POST   | Create embeddings                           |
+
+Anthropic-compatible:
+
+| Endpoint                         | Method | Description                                |
+| -------------------------------- | ------ | ------------------------------------------ |
+| `/v1/messages`                   | POST   | Messages API (streaming + non-stream)      |
+| `/v1/messages/count_tokens`      | POST   | Token count for a message payload          |
+
+Notes:
+
+- All endpoints are also mounted without the `/v1` prefix.
+- Both `/v1/chat/completions` and `/v1/messages` accept any model exposed by Copilot — pick a Claude (`claude-opus-4.6`, `claude-sonnet-4.5`, …) or non-Claude (`gpt-4.1`, `gpt-5`, …) model from `/v1/models`. The `/v1/messages` route auto-translates Anthropic-style model IDs (e.g. `claude-sonnet-4-5-20250929`) into Copilot's dotted form, and passes Copilot-native IDs through unchanged.
+- Account type is auto-detected from the Copilot token (individual / business / enterprise). Override with `--account-type` only if detection is wrong.
+
+## Tips
+
+- Use `--rate-limit <seconds>` (optionally with `--wait`) to avoid tripping Copilot's abuse detection.
+- Account type is auto-detected by default. To force a specific plan, pass `--account-type individual|business|enterprise`. See [GitHub's network routing docs](https://docs.github.com/en/enterprise-cloud@latest/copilot/managing-copilot/managing-github-copilot-in-your-organization/managing-access-to-github-copilot-in-your-organization/managing-github-copilot-access-to-your-organizations-network).
+- If you use [opencode](https://github.com/sst/opencode), you don't need this proxy — it supports Copilot natively.
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E519XS7W)
