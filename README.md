@@ -152,5 +152,3 @@ Notes:
 - Use `--rate-limit <seconds>` (optionally with `--wait`) to avoid tripping Copilot's abuse detection.
 - Account type is auto-detected by default. To force a specific plan, pass `--account-type individual|business|enterprise`. See [GitHub's network routing docs](https://docs.github.com/en/enterprise-cloud@latest/copilot/managing-copilot/managing-github-copilot-in-your-organization/managing-access-to-github-copilot-in-your-organization/managing-github-copilot-access-to-your-organizations-network).
 - If you use [opencode](https://github.com/sst/opencode), you don't need this proxy — it supports Copilot natively.
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/E1E519XS7W)
