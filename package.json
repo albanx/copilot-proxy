@@ -1,5 +1,5 @@
 {
-  "name": "@albanx/cpx",
+  "name": "@albanx83/cpx",
   "version": "1.0.3",
   "description": "Turn GitHub Copilot into OpenAI/Anthropic API compatible server. Usable with Claude Code!",
   "keywords": [

@@ -17,7 +17,7 @@ A local proxy that exposes GitHub Copilot as **OpenAI-compatible** (`/v1/chat/co
 The fastest way to run the proxy — no clone required:
 
 ```sh
-npx @albanx/cpx@latest start
+npx @albanx83/cpx@latest start
 ```
 
 On first run you'll be prompted to authenticate with GitHub via device-code flow. The server then listens on `http://localhost:4141`.
@@ -25,12 +25,12 @@ On first run you'll be prompted to authenticate with GitHub via device-code flow
 Useful flags:
 
 ```sh
-npx @albanx/cpx start --port 8080                  # custom port
-npx @albanx/cpx start --account-type business      # force business / enterprise (default: auto-detect)
-npx @albanx/cpx start --rate-limit 30 --wait       # throttle requests
-npx @albanx/cpx start --manual                     # approve each request
-npx @albanx/cpx start --github-token ghp_...       # non-interactive auth
-npx @albanx/cpx auth                               # only mint a GitHub token
+npx @albanx83/cpx start --port 8080                  # custom port
+npx @albanx83/cpx start --account-type business      # force business / enterprise (default: auto-detect)
+npx @albanx83/cpx start --rate-limit 30 --wait       # throttle requests
+npx @albanx83/cpx start --manual                     # approve each request
+npx @albanx83/cpx start --github-token ghp_...       # non-interactive auth
+npx @albanx83/cpx auth                               # only mint a GitHub token
 ```
 
 ## From source
@@ -95,7 +95,7 @@ To pin a specific model instead, add `"ANTHROPIC_MODEL": "claude-opus-4.6"` (or 
 Or use the interactive helper, which prompts for models and copies the full launch command to your clipboard:
 
 ```sh
-npx @albanx/cpx start --claude-code
+npx @albanx83/cpx start --claude-code
 ```
 
 ## CLI options (`start`)
