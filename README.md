@@ -19,8 +19,8 @@ A local proxy that exposes GitHub Copilot as **OpenAI-compatible** (`/v1/chat/co
 Clone the repo and install:
 
 ```sh
-git clone https://github.com/albanx/copilot-api.git
-cd copilot-api
+git clone https://github.com/albanx/copilot-proxy.git
+cd copilot-proxy
 bun install
 ```
 

@@ -12,7 +12,7 @@ endpoints. Lets tools like Claude Code use Copilot as a backend.
 - Runtime: **Bun** (>= 1.2.x) — not Node/npm
 - HTTP: **Hono** served via **srvx**
 - CLI: **citty**
-- Distributed via `npx copilot-api` (built bundle at `dist/main.js`)
+- Distributed via `bun run start` (built bundle at `dist/main.js`)
 
 ## Scope guardrails
 

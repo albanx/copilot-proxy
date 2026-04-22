@@ -1,5 +1,5 @@
 {
-  "name": "copilot-api",
+  "name": "copilot-proxy",
   "version": "0.7.0",
   "description": "Turn GitHub Copilot into OpenAI/Anthropic API compatible server. Usable with Claude Code!",
   "keywords": [
@@ -7,15 +7,15 @@
     "github-copilot",
     "openai-compatible"
   ],
-  "homepage": "https://github.com/albanx/copilot-api",
-  "bugs": "https://github.com/albanx/copilot-api/issues",
+  "homepage": "https://github.com/albanx/copilot-proxy",
+  "bugs": "https://github.com/albanx/copilot-proxy/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/albanx/copilot-api.git"
+    "url": "git+https://github.com/albanx/copilot-proxy.git"
   },
   "type": "module",
   "bin": {
-    "copilot-api": "./dist/main.js"
+    "copilot-proxy": "./dist/main.js"
   },
   "files": [
     "dist"
