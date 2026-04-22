@@ -9,10 +9,11 @@ A reverse-engineered local proxy that exposes **GitHub Copilot's chat API** as
 and **Anthropic-compatible** (`/v1/messages`, `/v1/messages/count_tokens`)
 endpoints. Lets tools like Claude Code use Copilot as a backend.
 
-- Runtime: **Bun** (>= 1.2.x) — not Node/npm
+- Runtime: **Bun** (>= 1.2.x) for development; runs under Node via the published bundle
 - HTTP: **Hono** served via **srvx**
 - CLI: **citty**
-- Distributed via `bun run start` (built bundle at `dist/main.js`)
+- Published to npm as **`copilot-bridge`** (bins: `copilot-bridge`, `copx`); end users typically launch with `npx copilot-bridge@latest start`
+- Local builds via `bun run build` (bundle at `dist/main.js`); run via `bun run start`
 
 ## Scope guardrails
 

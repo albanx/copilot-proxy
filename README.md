@@ -9,15 +9,24 @@ A local proxy that exposes GitHub Copilot as **OpenAI-compatible** (`/v1/chat/co
 
 ## Prerequisites
 
-- [Bun](https://bun.sh) >= 1.2.x
+- [Node.js](https://nodejs.org) (for `npx`) **or** [Bun](https://bun.sh) >= 1.2.x
 - GitHub account with Copilot subscription (individual, business, or enterprise)
 
 ## Quick start (npx)
 
-The fastest way to run the proxy — no clone required:
+The fastest way to run the proxy — no clone, no install:
 
 ```sh
 npx copilot-bridge@latest start
+```
+
+Or install globally once and reuse the `copilot-bridge` (or short `copx`) binary:
+
+```sh
+npm i -g copilot-bridge
+copilot-bridge start
+# or
+copx start
 ```
 
 On first run you'll be prompted to authenticate with GitHub via device-code flow. The server then listens on `http://localhost:4141`.
