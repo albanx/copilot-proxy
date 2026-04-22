@@ -1,5 +1,5 @@
 {
-  "name": "copilot-proxy",
+  "name": "copilotx",
   "version": "0.7.0",
   "description": "Turn GitHub Copilot into OpenAI/Anthropic API compatible server. Usable with Claude Code!",
   "keywords": [
@@ -15,7 +15,7 @@
   },
   "type": "module",
   "bin": {
-    "copilot-proxy": "./dist/main.js"
+    "copilotx": "./dist/main.js"
   },
   "files": [
     "dist"

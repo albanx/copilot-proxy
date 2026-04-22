@@ -7,7 +7,7 @@ import { start } from "./start"
 
 const main = defineCommand({
   meta: {
-    name: "copilot-proxy",
+    name: "copilotx",
     description:
       "A wrapper around GitHub Copilot API to make it OpenAI compatible, making it usable for other tools.",
   },

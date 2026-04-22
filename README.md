@@ -12,52 +12,41 @@ A local proxy that exposes GitHub Copilot as **OpenAI-compatible** (`/v1/chat/co
 - [Bun](https://bun.sh) >= 1.2.x
 - GitHub account with Copilot subscription (individual, business, or enterprise)
 
-## Setup
+## Quick start (npx)
 
-### 1. Install dependencies
+The fastest way to run the proxy — no clone required:
 
-Clone the repo and install:
+```sh
+npx copilotx@latest start
+```
+
+On first run you'll be prompted to authenticate with GitHub via device-code flow. The server then listens on `http://localhost:4141`.
+
+Useful flags:
+
+```sh
+npx copilotx start --port 8080                  # custom port
+npx copilotx start --account-type business      # force business / enterprise (default: auto-detect)
+npx copilotx start --rate-limit 30 --wait       # throttle requests
+npx copilotx start --manual                     # approve each request
+npx copilotx start --github-token ghp_...       # non-interactive auth
+npx copilotx auth                               # only mint a GitHub token
+```
+
+## From source
+
+If you want to hack on the code:
 
 ```sh
 git clone https://github.com/albanx/copilot-proxy.git
 cd copilot-proxy
 bun install
+bun run dev          # watch mode
+# or
+bun run build && bun run start
 ```
 
-### 2. Run the proxy
-
-For development (watch mode):
-
-```sh
-bun run dev
-```
-
-For production:
-
-```sh
-bun run build
-bun run start
-```
-
-On first run you'll be prompted to authenticate with GitHub via device-code flow. The server then listens on `http://localhost:4141`.
-
-The `dev` and `start` scripts pass through any flags. Useful examples:
-
-```sh
-bun run start -- --port 8080                  # custom port
-bun run start -- --account-type business      # force business / enterprise (default: auto-detect)
-bun run start -- --rate-limit 30 --wait       # throttle requests
-bun run start -- --manual                     # approve each request
-bun run start -- --github-token ghp_...       # non-interactive auth
-```
-
-Auth only (e.g. for CI to mint a token for `--github-token`):
-
-```sh
-bun run dist/main.js auth
-```
-
-### 3. Use with Claude Code
+## Use with Claude Code
 
 With the proxy running, set these environment variables in the terminal where you launch Claude Code:
 
@@ -106,7 +95,7 @@ To pin a specific model instead, add `"ANTHROPIC_MODEL": "claude-opus-4.6"` (or 
 Or use the interactive helper, which prompts for models and copies the full launch command to your clipboard:
 
 ```sh
-bun run start -- --claude-code
+npx copilotx start --claude-code
 ```
 
 ## CLI options (`start`)
