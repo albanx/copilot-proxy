@@ -80,6 +80,19 @@ interface Delta {
       arguments?: string
     }
   }>
+  /**
+   * Reasoning / "thinking" output streamed by reasoning-capable Copilot models.
+   * Copilot's CAPI emits reasoning under several field names depending on the
+   * upstream model (see the VS Code Copilot Chat extension's thinking.ts):
+   *   - text:      cot_summary (Azure OpenAI) | reasoning_text (Copilot) | thinking (Anthropic)
+   *   - id / sig:  cot_id (Azure OpenAI) | reasoning_opaque (Copilot) | signature (Anthropic)
+   */
+  cot_summary?: string | null
+  cot_id?: string | null
+  reasoning_text?: string | null
+  reasoning_opaque?: string | null
+  thinking?: string | null
+  signature?: string | null
 }
 
 interface Choice {
@@ -112,6 +125,16 @@ interface ResponseMessage {
   role: "assistant"
   content: string | null
   tool_calls?: Array<ToolCall>
+  /**
+   * Reasoning / "thinking" output for reasoning-capable models. See the Delta
+   * type above for the field-name variants Copilot's CAPI uses.
+   */
+  cot_summary?: string | null
+  cot_id?: string | null
+  reasoning_text?: string | null
+  reasoning_opaque?: string | null
+  thinking?: string | null
+  signature?: string | null
 }
 
 interface ChoiceNonStreaming {
@@ -148,7 +171,32 @@ export interface ChatCompletionsPayload {
     | { type: "function"; function: { name: string } }
     | null
   user?: string | null
+
+  /**
+   * Reasoning effort level for reasoning-capable models (e.g. GPT-5, o-series,
+   * Claude). Copilot's ChatCompletions API accepts this top-level field
+   * directly. The accepted levels vary per model — validate against the
+   * model's advertised `reasoning_effort` array before sending.
+   */
+  reasoning_effort?: ReasoningEffort | null
+  /**
+   * Thinking budget in tokens for Anthropic (Claude) models on the
+   * ChatCompletions API. Mirrors the VS Code Copilot Chat extension, which
+   * sends `thinking_budget` for Anthropic models on this endpoint.
+   */
+  thinking_budget?: number | null
 }
+
+/**
+ * Reasoning effort levels accepted by reasoning-capable models.
+ *
+ * The exact set a given model accepts varies (e.g. Claude models accept
+ * "max", OpenAI reasoning models accept "xhigh"), so callers should validate
+ * a requested value against the model's advertised `reasoning_effort` array
+ * rather than assuming all levels are universally supported. This union is the
+ * superset observed in the VS Code Copilot Chat extension.
+ */
+export type ReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh" | "max"
 
 export interface Tool {
   type: "function"

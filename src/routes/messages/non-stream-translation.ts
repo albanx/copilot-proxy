@@ -1,3 +1,4 @@
+import { state } from "~/lib/state"
 import {
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
@@ -29,8 +30,10 @@ import { mapOpenAIStopReasonToAnthropic } from "./utils"
 export function translateToOpenAI(
   payload: AnthropicMessagesPayload,
 ): ChatCompletionsPayload {
-  return {
-    model: translateModelName(payload.model),
+  const model = translateModelName(payload.model)
+
+  const openAIPayload: ChatCompletionsPayload = {
+    model,
     messages: translateAnthropicMessagesToOpenAI(
       payload.messages,
       payload.system,
@@ -44,6 +47,101 @@ export function translateToOpenAI(
     tools: translateAnthropicToolsToOpenAI(payload.tools),
     tool_choice: translateAnthropicToolChoiceToOpenAI(payload.tool_choice),
   }
+
+  applyReasoningParams(openAIPayload, payload, model)
+
+  return openAIPayload
+}
+
+/**
+ * Maps Anthropic-style reasoning/thinking controls onto the OpenAI
+ * ChatCompletions payload, but only when the *resolved* Copilot model actually
+ * supports them. This mirrors the VS Code Copilot Chat extension, which sends:
+ *   - `thinking_budget` (a token count) for Anthropic/Claude models, and
+ *   - `reasoning_effort` (e.g. "low"|"medium"|"high"|"xhigh"|"max") for
+ *     reasoning-capable models.
+ *
+ * The exact effort levels accepted vary per model, so the requested value is
+ * validated against the model's advertised `reasoning_effort` array. Capability
+ * gating avoids sending parameters that would make Copilot reject the request
+ * with a 400 for models that don't support thinking.
+ */
+function applyReasoningParams(
+  openAIPayload: ChatCompletionsPayload,
+  payload: AnthropicMessagesPayload,
+  model: string,
+): void {
+  const selectedModel = state.models?.data.find((m) => m.id === model)
+  const supports = selectedModel?.capabilities.supports
+
+  // If we don't know the model's capabilities, fall back to forwarding the
+  // client's intent verbatim so newly-added models still work.
+  const thinkingRequested =
+    payload.thinking?.type === "enabled"
+    || payload.thinking?.type === "adaptive"
+
+  // 1) Reasoning effort (e.g. GPT-5 / o-series). Only send when the model
+  //    advertises supported effort levels, and only the levels it accepts.
+  const effortLevels = supports?.reasoning_effort
+  const requestedEffort = payload.reasoning_effort
+  if (requestedEffort) {
+    const effortSupported =
+      effortLevels === undefined || effortLevels.length === 0 ?
+        // Unknown capabilities: forward as-is.
+        selectedModel === undefined
+      : effortLevels.includes(requestedEffort)
+    if (effortSupported) {
+      openAIPayload.reasoning_effort = requestedEffort
+    }
+  }
+
+  // 2) Thinking budget for Claude-family models. Translate
+  //    thinking.budget_tokens -> thinking_budget, clamped to the model's
+  //    advertised [min, max] window when known.
+  //
+  //    Capability signal: upstream Copilot does NOT expose a `thinking`
+  //    boolean — thinking support is indicated by `adaptive_thinking` or by the
+  //    presence of a [min, max] thinking-budget window (mirroring the VS Code
+  //    Copilot Chat extension, which gates on adaptiveThinking || (min && max)).
+  const supportsThinking =
+    supports === undefined ?
+      selectedModel === undefined // unknown model: forward client intent as-is
+    : Boolean(
+        supports.adaptive_thinking
+          || supports.max_thinking_budget
+          || supports.min_thinking_budget,
+      )
+  if (thinkingRequested && supportsThinking) {
+    const requestedBudget = payload.thinking?.budget_tokens
+    if (typeof requestedBudget === "number" && requestedBudget > 0) {
+      openAIPayload.thinking_budget = clampThinkingBudget(
+        requestedBudget,
+        supports?.min_thinking_budget,
+        supports?.max_thinking_budget,
+        payload.max_tokens,
+      )
+    }
+  }
+}
+
+function clampThinkingBudget(
+  requested: number,
+  min: number | undefined,
+  max: number | undefined,
+  maxTokens: number | undefined,
+): number {
+  let budget = requested
+  if (typeof min === "number" && budget < min) {
+    budget = min
+  }
+  if (typeof max === "number" && budget > max) {
+    budget = max
+  }
+  // The thinking budget must leave room for at least one output token.
+  if (typeof maxTokens === "number" && maxTokens > 1 && budget > maxTokens - 1) {
+    budget = maxTokens - 1
+  }
+  return budget
 }
 
 /**
@@ -322,14 +420,20 @@ export function translateToAnthropic(
   response: ChatCompletionResponse,
 ): AnthropicResponse {
   // Merge content from all choices
+  const allThinkingBlocks: Array<AnthropicThinkingBlock> = []
   const allTextBlocks: Array<AnthropicTextBlock> = []
   const allToolUseBlocks: Array<AnthropicToolUseBlock> = []
   let stopReason: "stop" | "length" | "tool_calls" | "content_filter" | null =
     null // default
   stopReason = response.choices[0]?.finish_reason ?? stopReason
 
-  // Process all choices to extract text and tool use blocks
+  // Process all choices to extract thinking, text and tool use blocks
   for (const choice of response.choices) {
+    const reasoningText = extractReasoningText(choice.message)
+    if (reasoningText) {
+      allThinkingBlocks.push({ type: "thinking", thinking: reasoningText })
+    }
+
     const textBlocks = getAnthropicTextBlocks(choice.message.content)
     const toolUseBlocks = getAnthropicToolUseBlocks(choice.message.tool_calls)
 
@@ -342,14 +446,13 @@ export function translateToAnthropic(
     }
   }
 
-  // Note: GitHub Copilot doesn't generate thinking blocks, so we don't include them in responses
-
+  // Anthropic requires thinking blocks to precede text/tool_use blocks.
   return {
     id: response.id,
     type: "message",
     role: "assistant",
     model: response.model,
-    content: [...allTextBlocks, ...allToolUseBlocks],
+    content: [...allThinkingBlocks, ...allTextBlocks, ...allToolUseBlocks],
     stop_reason: mapOpenAIStopReasonToAnthropic(stopReason),
     stop_sequence: null,
     usage: {
@@ -364,6 +467,24 @@ export function translateToAnthropic(
       }),
     },
   }
+}
+
+/**
+ * Copilot's CAPI exposes reasoning output under several field names depending
+ * on the upstream model/endpoint. This mirrors the priority order used by the
+ * VS Code Copilot Chat extension (getThinkingDeltaText in thinkingUtils.ts):
+ * cot_summary (Azure OpenAI) -> reasoning_text (Copilot) -> thinking (Anthropic).
+ *
+ * Accepts either a streaming `delta` or a non-streaming `message`, since the
+ * extension reads thinking from `choice.message || choice.delta`.
+ */
+export function extractReasoningText(source: {
+  cot_summary?: string | null
+  reasoning_text?: string | null
+  thinking?: string | null
+}): string | undefined {
+  const text = source.cot_summary ?? source.reasoning_text ?? source.thinking
+  return text ? text : undefined
 }
 
 function getAnthropicTextBlocks(

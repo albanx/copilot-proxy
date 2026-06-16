@@ -16,6 +16,9 @@ import {
 function buildLogInfo(
   payload: ChatCompletionsPayload,
   tokens?: { input: number; output: number },
+  selectedModel?: {
+    capabilities: { limits?: { max_context_window_tokens?: number } }
+  },
 ) {
   return {
     model: payload.model,
@@ -28,13 +31,17 @@ function buildLogInfo(
     account: state.accountType,
     inputTokens: tokens?.input,
     outputTokens: tokens?.output,
+    reasoningEffort: payload.reasoning_effort ?? undefined,
+    thinkingBudget: payload.thinking_budget ?? undefined,
+    contextWindow:
+      selectedModel?.capabilities.limits?.max_context_window_tokens,
   }
 }
 
 function normalizeMaxTokens(
   payload: ChatCompletionsPayload,
   selectedModel:
-    | { capabilities: { limits: { max_output_tokens?: number } } }
+    | { capabilities: { limits?: { max_output_tokens?: number } } }
     | undefined,
 ) {
   const payloadAny = payload as unknown as Record<string, unknown>
@@ -56,7 +63,7 @@ function normalizeMaxTokens(
     return
   }
   payloadAny.max_completion_tokens =
-    selectedModel?.capabilities.limits.max_output_tokens
+    selectedModel?.capabilities.limits?.max_output_tokens
   consola.debug(
     "Set max_completion_tokens to:",
     JSON.stringify(payloadAny.max_completion_tokens),
@@ -84,7 +91,7 @@ export async function handleCompletion(c: Context) {
     consola.warn("Failed to calculate token count:", error)
   }
 
-  c.set("logInfo", buildLogInfo(payload, tokenCount))
+  c.set("logInfo", buildLogInfo(payload, tokenCount, selectedModel))
 
   if (state.manualApprove) await awaitApproval()
 

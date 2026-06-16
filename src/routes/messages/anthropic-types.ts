@@ -19,9 +19,18 @@ export interface AnthropicMessagesPayload {
     name?: string
   }
   thinking?: {
-    type: "enabled"
+    type: "enabled" | "disabled" | "adaptive"
     budget_tokens?: number
   }
+  /**
+   * Reasoning effort hint forwarded by some clients. Not part of the strict
+   * Anthropic schema, but Claude Code / other callers may include it and we
+   * pass it through to reasoning-capable Copilot models. The accepted levels
+   * vary per model (Claude supports up to "max"; OpenAI reasoning models
+   * support "xhigh"), so it is validated against the model's advertised
+   * `reasoning_effort` array before being sent upstream.
+   */
+  reasoning_effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max"
   service_tier?: "auto" | "standard_only"
 }
 
@@ -196,6 +205,8 @@ export interface AnthropicStreamState {
   messageStartSent: boolean
   contentBlockIndex: number
   contentBlockOpen: boolean
+  /** True when the currently-open content block is a `thinking` block. */
+  thinkingBlockOpen: boolean
   toolCalls: {
     [openAIToolIndex: number]: {
       id: string

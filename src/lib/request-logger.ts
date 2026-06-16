@@ -14,6 +14,10 @@ export interface RequestLogInfo {
   inputTokens?: number
   outputTokens?: number
   note?: string
+  // Reasoning / thinking parameters actually applied for this request.
+  reasoningEffort?: string
+  thinkingBudget?: number
+  contextWindow?: number
 }
 
 declare module "hono" {
@@ -59,6 +63,12 @@ export const requestLogger = (): MiddlewareHandler => {
     if (info.stream !== undefined) params.push(`stream=${info.stream}`)
     if (info.responseFormat) params.push(`format=${info.responseFormat}`)
     if (info.tools) params.push(`tools=${info.tools}`)
+    if (info.reasoningEffort)
+      params.push(`${BOLD}effort${RESET}=${info.reasoningEffort}`)
+    if (info.thinkingBudget !== undefined)
+      params.push(`${BOLD}thinking${RESET}=${info.thinkingBudget}`)
+    if (info.contextWindow !== undefined)
+      params.push(`ctx=${info.contextWindow}`)
     if (info.inputTokens !== undefined)
       params.push(`tokens=${info.inputTokens}/${info.outputTokens ?? 0}`)
     if (info.note) params.push(`note="${info.note}"`)

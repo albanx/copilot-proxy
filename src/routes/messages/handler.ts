@@ -63,6 +63,12 @@ export async function handleCompletion(c: Context) {
     account: state.accountType,
     inputTokens: tokenCount?.input,
     outputTokens: tokenCount?.output,
+    // Surface the reasoning params actually applied (post capability-gating)
+    // plus the resolved model's context window, so they're visible per-request.
+    reasoningEffort: openAIPayload.reasoning_effort ?? undefined,
+    thinkingBudget: openAIPayload.thinking_budget ?? undefined,
+    contextWindow:
+      selectedModel?.capabilities.limits?.max_context_window_tokens,
   })
 
   if (state.manualApprove) {
@@ -79,6 +85,7 @@ export async function handleCompletion(c: Context) {
         messageStartSent: false,
         contentBlockIndex: 0,
         contentBlockOpen: false,
+        thinkingBlockOpen: false,
         toolCalls: {},
       }
 

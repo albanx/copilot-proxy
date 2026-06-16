@@ -4,6 +4,7 @@ import {
   type AnthropicStreamEventData,
   type AnthropicStreamState,
 } from "./anthropic-types"
+import { extractReasoningText } from "./non-stream-translation"
 import { mapOpenAIStopReasonToAnthropic } from "./utils"
 
 function isToolBlockOpen(state: AnthropicStreamState): boolean {
@@ -57,7 +58,56 @@ export function translateChunkToAnthropicEvents(
     state.messageStartSent = true
   }
 
+  // Reasoning / "thinking" deltas. Copilot's CAPI emits these under several
+  // field names depending on the model; extractReasoningText normalizes them.
+  const reasoningText = extractReasoningText(delta)
+  if (reasoningText) {
+    // If a non-thinking block is open (shouldn't normally happen before text),
+    // close it first.
+    if (state.contentBlockOpen && !state.thinkingBlockOpen) {
+      events.push({
+        type: "content_block_stop",
+        index: state.contentBlockIndex,
+      })
+      state.contentBlockIndex++
+      state.contentBlockOpen = false
+    }
+
+    if (!state.contentBlockOpen) {
+      events.push({
+        type: "content_block_start",
+        index: state.contentBlockIndex,
+        content_block: {
+          type: "thinking",
+          thinking: "",
+        },
+      })
+      state.contentBlockOpen = true
+      state.thinkingBlockOpen = true
+    }
+
+    events.push({
+      type: "content_block_delta",
+      index: state.contentBlockIndex,
+      delta: {
+        type: "thinking_delta",
+        thinking: reasoningText,
+      },
+    })
+  }
+
   if (delta.content) {
+    // Close an open thinking block before starting text.
+    if (state.contentBlockOpen && state.thinkingBlockOpen) {
+      events.push({
+        type: "content_block_stop",
+        index: state.contentBlockIndex,
+      })
+      state.contentBlockIndex++
+      state.contentBlockOpen = false
+      state.thinkingBlockOpen = false
+    }
+
     if (isToolBlockOpen(state)) {
       // A tool block was open, so close it before starting a text block.
       events.push({
@@ -95,13 +145,14 @@ export function translateChunkToAnthropicEvents(
       if (toolCall.id && toolCall.function?.name) {
         // New tool call starting.
         if (state.contentBlockOpen) {
-          // Close any previously open block.
+          // Close any previously open block (text or thinking).
           events.push({
             type: "content_block_stop",
             index: state.contentBlockIndex,
           })
           state.contentBlockIndex++
           state.contentBlockOpen = false
+          state.thinkingBlockOpen = false
         }
 
         const anthropicBlockIndex = state.contentBlockIndex
@@ -149,6 +200,7 @@ export function translateChunkToAnthropicEvents(
         index: state.contentBlockIndex,
       })
       state.contentBlockOpen = false
+      state.thinkingBlockOpen = false
     }
 
     events.push(
