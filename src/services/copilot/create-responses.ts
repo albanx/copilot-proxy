@@ -1,5 +1,9 @@
 import consola from "consola"
 
+import { copilotBaseUrl, copilotHeaders } from "~/lib/api-config"
+import { HTTPError } from "~/lib/error"
+import { state } from "~/lib/state"
+
 export interface ResponsesInputItem {
   type?: string
   role?: string
@@ -85,4 +89,38 @@ export function sanitizePayload(payload: ResponsesPayload): ResponsesPayload {
   delete next.tools
   delete next.tool_choice
   return next
+}
+
+/**
+ * Forward a Responses-format payload to Copilot upstream `/responses`.
+ * Returns the raw streaming `Response` when `payload.stream` is set (the handler
+ * iterates it via `events()` — mirrors the messages handler); otherwise returns
+ * the parsed JSON object.
+ */
+export const createResponses = async (
+  payload: ResponsesPayload,
+): Promise<Response | Record<string, unknown>> => {
+  if (!state.copilotToken) throw new Error("Copilot token not found")
+
+  const headers: Record<string, string> = {
+    ...copilotHeaders(state, detectVision(payload)),
+    "X-Initiator": initiator(payload),
+  }
+
+  const response = await fetch(`${copilotBaseUrl(state)}/responses`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    consola.error("Failed to create responses", response)
+    throw new HTTPError("Failed to create responses", response)
+  }
+
+  if (payload.stream) {
+    return response
+  }
+
+  return (await response.json()) as Record<string, unknown>
 }
