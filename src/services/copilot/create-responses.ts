@@ -33,12 +33,15 @@ export interface ResponsesPayload {
 export function initiator(payload: ResponsesPayload): "agent" | "user" {
   const { input } = payload
   if (!Array.isArray(input)) return "user"
-  const isAgent = input.some(
-    (item) =>
-      item.role === "assistant"
-      || item.type === "function_call"
-      || item.type === "function_call_output",
-  )
+  const isAgent = (input as Array<unknown>).some((item) => {
+    if (typeof item !== "object" || item === null) return false
+    const it = item as ResponsesInputItem
+    return (
+      it.role === "assistant"
+      || it.type === "function_call"
+      || it.type === "function_call_output"
+    )
+  })
   return isAgent ? "agent" : "user"
 }
 
@@ -46,8 +49,9 @@ export function initiator(payload: ResponsesPayload): "agent" | "user" {
 export function detectVision(payload: ResponsesPayload): boolean {
   const { input } = payload
   if (!Array.isArray(input)) return false
-  return input.some((item) => {
-    const content = item.content
+  return (input as Array<unknown>).some((item) => {
+    if (typeof item !== "object" || item === null) return false
+    const content = (item as ResponsesInputItem).content
     if (!Array.isArray(content)) return false
     return content.some(
       (part) =>

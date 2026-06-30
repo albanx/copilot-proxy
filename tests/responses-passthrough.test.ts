@@ -140,3 +140,68 @@ describe("sanitizePayload", () => {
     expect(out.top_p).toBe(0.9)
   })
 })
+
+describe("helper robustness on malformed input", () => {
+  test("initiator ignores null items → user", () => {
+    const payload = {
+      model: "gpt-5.5",
+      input: [null, { role: "user", content: "hi" }],
+    } as unknown as ResponsesPayload
+    expect(initiator(payload)).toBe("user")
+  })
+
+  test("initiator still detects agent alongside null items", () => {
+    const payload = {
+      model: "gpt-5.5",
+      input: [
+        null,
+        { type: "function_call", name: "f", arguments: "{}", call_id: "c1" },
+      ],
+    } as unknown as ResponsesPayload
+    expect(initiator(payload)).toBe("agent")
+  })
+
+  test("detectVision ignores null items → false", () => {
+    const payload = {
+      model: "gpt-5.5",
+      input: [null],
+    } as unknown as ResponsesPayload
+    expect(detectVision(payload)).toBe(false)
+  })
+
+  test("detectVision ignores null/string content parts → false", () => {
+    const payload = {
+      model: "gpt-5.5",
+      input: [{ role: "user", content: [null, "plain string"] }],
+    } as unknown as ResponsesPayload
+    expect(detectVision(payload)).toBe(false)
+  })
+})
+
+describe("sanitizePayload edge cases", () => {
+  test("empty tools array → drops tools and tool_choice", () => {
+    const payload: ResponsesPayload = {
+      model: "gpt-5.5",
+      input: "hi",
+      tools: [],
+      tool_choice: "auto",
+    }
+    const out = sanitizePayload(payload)
+    expect(out.tools).toBeUndefined()
+    expect(out.tool_choice).toBeUndefined()
+  })
+
+  test("does not mutate the original payload when stripping", () => {
+    const payload: ResponsesPayload = {
+      model: "gpt-5.5",
+      input: "hi",
+      tools: [
+        { type: "function", name: "f" },
+        { type: "web_search" },
+      ],
+    }
+    const snapshot = structuredClone(payload)
+    sanitizePayload(payload)
+    expect(payload).toEqual(snapshot)
+  })
+})
