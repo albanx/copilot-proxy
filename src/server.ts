@@ -24,6 +24,7 @@ server.route("/responses", responsesRoutes)
 server.route("/v1/chat/completions", completionRoutes)
 server.route("/v1/models", modelRoutes)
 server.route("/v1/embeddings", embeddingRoutes)
+server.route("/v1/responses", responsesRoutes)
 
 // Anthropic compatible endpoints
 server.route("/v1/messages", messageRoutes)

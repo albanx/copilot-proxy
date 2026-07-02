@@ -129,6 +129,7 @@ OpenAI-compatible:
 | Endpoint                    | Method | Description                                 |
 | --------------------------- | ------ | ------------------------------------------- |
 | `/v1/chat/completions`      | POST   | Chat completion (streaming + non-stream)    |
+| `/v1/responses`             | POST   | Responses API (streaming + non-stream)      |
 | `/v1/models`                | GET    | List available Copilot models               |
 | `/v1/embeddings`            | POST   | Create embeddings                           |
 
