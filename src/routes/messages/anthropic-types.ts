@@ -48,12 +48,33 @@ export interface AnthropicImageBlock {
   }
 }
 
+export interface AnthropicDocumentBlock {
+  type: "document"
+  source: {
+    type: "base64"
+    media_type: "application/pdf"
+    data: string
+  }
+  title?: string | null
+}
+
+export interface AnthropicToolReferenceBlock {
+  type: "tool_reference"
+  tool_name: string
+}
+
 export interface AnthropicToolResultBlock {
   type: "tool_result"
   tool_use_id: string
-  content: string
+  content: string | Array<AnthropicToolResultContentBlock>
   is_error?: boolean
 }
+
+export type AnthropicToolResultContentBlock =
+  | AnthropicTextBlock
+  | AnthropicImageBlock
+  | AnthropicDocumentBlock
+  | AnthropicToolReferenceBlock
 
 export interface AnthropicToolUseBlock {
   type: "tool_use"
@@ -65,11 +86,19 @@ export interface AnthropicToolUseBlock {
 export interface AnthropicThinkingBlock {
   type: "thinking"
   thinking: string
+  /**
+   * Optional signature. Native `/v1/messages` and the `/responses` translation
+   * carry an encrypted reasoning/compaction signature here, but the
+   * `/chat/completions` fallback emits signature-less thinking blocks, so this
+   * is optional locally.
+   */
+  signature?: string
 }
 
 export type AnthropicUserContentBlock =
   | AnthropicTextBlock
   | AnthropicImageBlock
+  | AnthropicDocumentBlock
   | AnthropicToolResultBlock
 
 export type AnthropicAssistantContentBlock =

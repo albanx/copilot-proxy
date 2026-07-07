@@ -19,6 +19,7 @@ import {
   type AnthropicThinkingBlock,
   type AnthropicTool,
   type AnthropicToolResultBlock,
+  type AnthropicToolResultContentBlock,
   type AnthropicToolUseBlock,
   type AnthropicUserContentBlock,
   type AnthropicUserMessage,
@@ -317,7 +318,11 @@ function handleAssistantMessage(
 function mapContent(
   content:
     | string
-    | Array<AnthropicUserContentBlock | AnthropicAssistantContentBlock>,
+    | Array<
+        | AnthropicUserContentBlock
+        | AnthropicAssistantContentBlock
+        | AnthropicToolResultContentBlock
+      >,
 ): string | Array<ContentPart> | null {
   if (typeof content === "string") {
     return content
@@ -364,6 +369,19 @@ function mapContent(
     }
   }
   return contentParts
+}
+
+/**
+ * Ensures `type: "object"` schema has a `properties` field.
+ * OpenAI's API rejects object schemas without it.
+ */
+export const normalizeToolSchema = (
+  schema: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (schema.type === "object" && !schema.properties) {
+    return { ...schema, properties: {} }
+  }
+  return schema
 }
 
 function translateAnthropicToolsToOpenAI(

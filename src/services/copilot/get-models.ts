@@ -79,4 +79,14 @@ export interface Model {
     state: string
     terms: string
   }
+  /**
+   * Upstream endpoints the model can be called on, e.g.
+   * ["/chat/completions", "/responses", "/v1/messages"]. When present and it
+   * includes "/v1/messages", the model accepts native Anthropic Messages
+   * requests (which support assistant-message prefill) and can be routed to the
+   * `/v1/messages` passthrough instead of being translated to
+   * `/chat/completions`. Not all upstream deployments advertise this field, so
+   * routing also falls back to a vendor/id heuristic.
+   */
+  supported_endpoints?: Array<string>
 }

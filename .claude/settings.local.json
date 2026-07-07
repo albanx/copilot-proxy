@@ -2,7 +2,16 @@
   "permissions": {
     "allow": [
       "Bash(bun run:*)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "WebSearch",
+      "Bash(gh repo *)",
+      "Bash(gh api *)",
+      "WebFetch(domain:github.com)",
+      "Bash(curl -s \"https://api.github.com/repos/betaHi/copilot-bridge/git/trees/HEAD?recursive=1\")",
+      "Bash(curl -s 'https://api.github.com/repos/betaHi/copilot-bridge/git/trees/__TRACKED_VAR__?recursive=1')",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/betaHi/copilot-bridge/main/src/services/copilot/create-chat-completions.ts\")",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/betaHi/copilot-bridge/main/src/bridges/claude/messages.ts\")",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/betaHi/copilot-bridge/main/src/bridges/claude/non-stream-translation.ts\")"
     ]
   }
 }

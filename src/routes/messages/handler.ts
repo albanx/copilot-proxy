@@ -9,19 +9,26 @@ import { awaitApproval } from "~/lib/approval"
 import { checkRateLimit } from "~/lib/rate-limit"
 import { state } from "~/lib/state"
 import { getTokenCount } from "~/lib/tokenizer"
+import { getResponsesTransportForModel } from "~/routes/responses/utils"
 import {
   createChatCompletions,
   type ChatCompletionChunk,
 } from "~/services/copilot/create-chat-completions"
+import {
+  createMessages,
+  supportsAnthropicMessages,
+} from "~/services/copilot/create-messages"
 
 import {
   type AnthropicMessagesPayload,
   type AnthropicStreamState,
 } from "./anthropic-types"
 import {
+  translateModelName,
   translateToAnthropic,
   translateToOpenAI,
 } from "./non-stream-translation"
+import { handleWithResponsesApi } from "./responses-flow"
 import { translateChunkToAnthropicEvents } from "./stream-translation"
 
 export async function handleCompletion(c: Context) {
@@ -30,6 +37,109 @@ export async function handleCompletion(c: Context) {
   const anthropicPayload = await c.req.json<AnthropicMessagesPayload>()
   consola.debug("Anthropic request payload:", JSON.stringify(anthropicPayload))
 
+  if (state.manualApprove) {
+    await awaitApproval()
+  }
+
+  // Resolve the Copilot model id and its advertised capabilities so we can
+  // decide whether to forward natively (Anthropic /v1/messages) or translate.
+  const copilotModelId = translateModelName(anthropicPayload.model)
+  const selectedModel = state.models?.data.find(
+    (model) => model.id === copilotModelId,
+  )
+
+  // Native passthrough for models that speak the Anthropic Messages API. This
+  // preserves Anthropic-only features (notably assistant-message prefill) that
+  // the /chat/completions translation cannot express and would 400 on.
+  if (supportsAnthropicMessages(selectedModel, copilotModelId)) {
+    return handleNativeMessages(c, anthropicPayload, copilotModelId)
+  }
+
+  // Second preference: models that advertise the OpenAI `/responses` endpoint
+  // but not native `/v1/messages`. Translate to a Responses payload and back to
+  // Anthropic, preserving reasoning/thinking and tool semantics that the
+  // `/chat/completions` fallback below would lose.
+  if (getResponsesTransportForModel(selectedModel) != null) {
+    return handleWithResponsesApi(c, anthropicPayload, { selectedModel })
+  }
+
+  return handleTranslatedCompletion(c, anthropicPayload)
+}
+
+/**
+ * Forward the request to Copilot's native `/v1/messages` and re-emit its
+ * Anthropic SSE events verbatim (preserving semantic `event:` names) so
+ * Claude-Code-style clients receive an untouched Anthropic response — including
+ * prefill continuations. Mirrors the Responses passthrough handler.
+ */
+async function handleNativeMessages(
+  c: Context,
+  anthropicPayload: AnthropicMessagesPayload,
+  copilotModelId: string,
+) {
+  const payload: AnthropicMessagesPayload = {
+    ...anthropicPayload,
+    model: copilotModelId,
+  }
+
+  const selectedModel = state.models?.data.find(
+    (model) => model.id === copilotModelId,
+  )
+
+  c.set("logInfo", {
+    model: copilotModelId,
+    sourceModel: anthropicPayload.model,
+    upstream: `${copilotBaseUrl(state)}/v1/messages`,
+    stream: payload.stream ?? false,
+    messages: payload.messages.length,
+    tools: payload.tools?.length ?? 0,
+    responseFormat: payload.stream ? "sse" : "json",
+    account: state.accountType,
+    contextWindow:
+      selectedModel?.capabilities.limits?.max_context_window_tokens,
+  })
+
+  const response = await createMessages(payload, {
+    anthropicBeta: c.req.header("anthropic-beta"),
+  })
+
+  // Streaming: response is a raw fetch Response emitting Anthropic SSE events.
+  if (response instanceof Response) {
+    consola.debug("Streaming response from Copilot /v1/messages")
+    return streamSSE(c, async (stream) => {
+      for await (const rawEvent of events(response)) {
+        if (rawEvent.data === "[DONE]") {
+          break
+        }
+        if (!rawEvent.data) {
+          continue
+        }
+        const parsed = JSON.parse(rawEvent.data) as { type?: string }
+        await stream.writeSSE({
+          event: parsed.type ?? "message",
+          data: rawEvent.data,
+        })
+      }
+    })
+  }
+
+  // Non-streaming: response is a parsed Anthropic JSON object — forward verbatim.
+  consola.debug(
+    "Non-streaming response from Copilot /v1/messages:",
+    JSON.stringify(response).slice(-400),
+  )
+  return c.json(response)
+}
+
+/**
+ * Legacy path: translate the Anthropic request to OpenAI `/chat/completions`
+ * and translate the response back. Used for models that do not advertise (and
+ * are not heuristically detected as supporting) the native Messages API.
+ */
+async function handleTranslatedCompletion(
+  c: Context,
+  anthropicPayload: AnthropicMessagesPayload,
+) {
   const openAIPayload = translateToOpenAI(anthropicPayload)
   consola.debug(
     "Translated OpenAI request payload:",
@@ -70,10 +180,6 @@ export async function handleCompletion(c: Context) {
     contextWindow:
       selectedModel?.capabilities.limits?.max_context_window_tokens,
   })
-
-  if (state.manualApprove) {
-    await awaitApproval()
-  }
 
   const response = await createChatCompletions(openAIPayload)
 

@@ -6,6 +6,28 @@ import {
   sanitizePayload,
   type ResponsesPayload,
 } from "../src/services/copilot/create-responses"
+import { modelSupportsResponses } from "../src/routes/responses/handler"
+import { type Model } from "../src/services/copilot/get-models"
+
+/** Build a minimal Model, overriding only the fields a test cares about. */
+function mkModel(overrides: Partial<Model>): Model {
+  return {
+    capabilities: {
+      family: "test",
+      object: "model_capabilities",
+      tokenizer: "o200k_base",
+      type: "chat",
+    },
+    id: "test-model",
+    model_picker_enabled: true,
+    name: "Test Model",
+    object: "model",
+    preview: false,
+    vendor: "test",
+    version: "1.0",
+    ...overrides,
+  }
+}
 
 describe("initiator", () => {
   test("string input → user", () => {
@@ -203,5 +225,37 @@ describe("sanitizePayload edge cases", () => {
     const snapshot = structuredClone(payload)
     sanitizePayload(payload)
     expect(payload).toEqual(snapshot)
+  })
+})
+
+describe("modelSupportsResponses", () => {
+  test("advertised endpoints including /responses → true", () => {
+    const model = mkModel({
+      id: "gpt-5.5",
+      supported_endpoints: ["/chat/completions", "/responses"],
+    })
+    expect(modelSupportsResponses(model)).toBe(true)
+  })
+
+  test("advertised endpoints excluding /responses → false", () => {
+    const model = mkModel({
+      id: "gpt-5.5",
+      supported_endpoints: ["/chat/completions"],
+    })
+    expect(modelSupportsResponses(model)).toBe(false)
+  })
+
+  test("undefined model (list not loaded) → true (permissive)", () => {
+    expect(modelSupportsResponses(undefined)).toBe(true)
+  })
+
+  test("known model without any advertised endpoints → true (permissive)", () => {
+    const model = mkModel({ id: "gpt-5.5" })
+    expect(modelSupportsResponses(model)).toBe(true)
+  })
+
+  test("empty endpoints array → true (permissive)", () => {
+    const model = mkModel({ id: "gpt-5.5", supported_endpoints: [] })
+    expect(modelSupportsResponses(model)).toBe(true)
   })
 })
