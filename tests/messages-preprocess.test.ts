@@ -236,3 +236,127 @@ describe("prepareMessagesApiPayload — no selected model", () => {
     expect(payload.thinking).toEqual({ type: "enabled", budget_tokens: 1024 })
   })
 })
+
+describe("prepareMessagesApiPayload — assistant thinking-block history filter", () => {
+  test("drops a history thinking block whose signature contains '@' (invalid-signature 400 repro)", () => {
+    const payload = mkPayload({
+      model: "claude-fable-5",
+      messages: [
+        { role: "user", content: "hi" },
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "reasoning", signature: "abc@def" },
+            { type: "text", text: "hello" },
+          ],
+        },
+      ],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    // The '@'-signed thinking block is stripped; the text block survives.
+    expect(payload.messages[1].content).toEqual([{ type: "text", text: "hello" }])
+  })
+
+  test("drops a thinking block with a missing signature", () => {
+    const payload = mkPayload({
+      model: "claude-fable-5",
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "unsigned reasoning" },
+            { type: "text", text: "answer" },
+          ],
+        },
+      ],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.messages[0].content).toEqual([{ type: "text", text: "answer" }])
+  })
+
+  test("drops a thinking block with empty thinking text", () => {
+    const payload = mkPayload({
+      model: "claude-fable-5",
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "", signature: "validsig" },
+            { type: "text", text: "answer" },
+          ],
+        },
+      ],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.messages[0].content).toEqual([{ type: "text", text: "answer" }])
+  })
+
+  test("drops a thinking block equal to the 'Thinking...' placeholder", () => {
+    const payload = mkPayload({
+      model: "claude-fable-5",
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "Thinking...", signature: "validsig" },
+            { type: "text", text: "answer" },
+          ],
+        },
+      ],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.messages[0].content).toEqual([{ type: "text", text: "answer" }])
+  })
+
+  test("keeps a valid signed thinking block", () => {
+    const payload = mkPayload({
+      model: "claude-fable-5",
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            { type: "thinking", thinking: "real reasoning", signature: "goodsig" },
+            { type: "text", text: "answer" },
+          ],
+        },
+      ],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.messages[0].content).toEqual([
+      { type: "thinking", thinking: "real reasoning", signature: "goodsig" },
+      { type: "text", text: "answer" },
+    ])
+  })
+
+  test("leaves user-message content untouched even if it contains a thinking-like block", () => {
+    const payload = mkPayload({
+      model: "claude-fable-5",
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "please continue" }],
+        },
+      ],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.messages[0].content).toEqual([
+      { type: "text", text: "please continue" },
+    ])
+  })
+
+  test("leaves string-content assistant messages untouched", () => {
+    const payload = mkPayload({
+      model: "claude-fable-5",
+      messages: [{ role: "assistant", content: "plain string answer" }],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.messages[0].content).toBe("plain string answer")
+  })
+})

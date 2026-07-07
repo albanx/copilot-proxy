@@ -48,6 +48,51 @@ const shouldSummarizeThinkingDisplayForModel = (model: string): boolean => {
 }
 
 /**
+ * Placeholder emitted by some clients for an in-flight reasoning block before
+ * the real (signed) thinking text arrives. Copilot's native `/v1/messages`
+ * rejects it as an invalid signed block, so it must be filtered from history.
+ */
+const THINKING_PLACEHOLDER = "Thinking..."
+
+/**
+ * Strip assistant `thinking` blocks from the message history that Copilot's
+ * native `/v1/messages` endpoint would reject with
+ * `messages.<n>.content.<m>: Invalid signature in thinking block`.
+ *
+ * Faithful port of caozhiyuan/copilot-api's `filterAssistantThinkingBlocks`.
+ * Only `role: "assistant"` messages with array content are touched; a thinking
+ * block is kept only when ALL of the following hold (checked in this order):
+ *   - `thinking` text is truthy,
+ *   - it is not the `"Thinking..."` placeholder,
+ *   - a `signature` is present, and
+ *   - the signature does not contain `"@"`.
+ * Every non-`thinking` block (text, tool_use, redacted_thinking, …) and every
+ * non-assistant message passes through unchanged. Mutates `payload` in place.
+ *
+ * Without this, the verbatim passthrough replays a stale/unsigned/placeholder
+ * thinking block from an earlier turn on every subsequent native call, 400ing
+ * the whole request (the client then retries with the block pruned).
+ */
+const filterAssistantThinkingBlocks = (
+  payload: AnthropicMessagesPayload,
+): void => {
+  for (const message of payload.messages) {
+    if (message.role !== "assistant" || !Array.isArray(message.content)) {
+      continue
+    }
+    message.content = message.content.filter((block) => {
+      if (block.type !== "thinking") return true
+      return Boolean(
+        block.thinking
+          && block.thinking !== THINKING_PLACEHOLDER
+          && block.signature
+          && !block.signature.includes("@"),
+      )
+    })
+  }
+}
+
+/**
  * Sanitize an inbound Anthropic Messages payload for Copilot's native
  * `/v1/messages` endpoint according to the selected model's advertised
  * capabilities. Mutates `payload` in place.
@@ -74,6 +119,11 @@ export const prepareMessagesApiPayload = (
   payload: AnthropicMessagesPayload,
   selectedModel?: Model,
 ): void => {
+  // Drop history thinking blocks whose signature Copilot's native endpoint
+  // rejects, independent of the reasoning-config gating below. Runs first so it
+  // applies on every branch (adaptive, non-adaptive, and unknown-model).
+  filterAssistantThinkingBlocks(payload)
+
   // Whether the client sent any thinking config *before* we mutate it — gates
   // the default `display = "summarized"` in the adaptive branch.
   const hasThinking = Boolean(payload.thinking)
