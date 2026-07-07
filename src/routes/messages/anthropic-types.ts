@@ -21,6 +21,12 @@ export interface AnthropicMessagesPayload {
   thinking?: {
     type: "enabled" | "disabled" | "adaptive"
     budget_tokens?: number
+    /**
+     * Display mode for adaptive thinking. Copilot's native `/v1/messages`
+     * accepts `"summarized"` to collapse streamed reasoning; the preprocessor
+     * sets it when rewriting to adaptive thinking for capable models.
+     */
+    display?: "summarized"
   }
   /**
    * Reasoning effort hint forwarded by some clients. Not part of the strict
@@ -31,6 +37,16 @@ export interface AnthropicMessagesPayload {
    * `reasoning_effort` array before being sent upstream.
    */
   reasoning_effort?: "none" | "low" | "medium" | "high" | "xhigh" | "max"
+  /**
+   * Copilot-native reasoning control on the `/v1/messages` passthrough. Adaptive
+   * models expect the reasoning level here as `effort`; non-adaptive models
+   * reject it (hence the preprocessor strips it for them). Typed loosely with an
+   * index signature so unrelated client-sent keys survive round-tripping.
+   */
+  output_config?: {
+    effort?: "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"
+    [key: string]: unknown
+  }
   service_tier?: "auto" | "standard_only"
 }
 

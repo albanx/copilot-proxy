@@ -28,6 +28,7 @@ import {
   translateToAnthropic,
   translateToOpenAI,
 } from "./non-stream-translation"
+import { prepareMessagesApiPayload } from "./preprocess"
 import { handleWithResponsesApi } from "./responses-flow"
 import { translateChunkToAnthropicEvents } from "./stream-translation"
 
@@ -85,6 +86,13 @@ async function handleNativeMessages(
   const selectedModel = state.models?.data.find(
     (model) => model.id === copilotModelId,
   )
+
+  // Sanitize thinking / output_config per the model's advertised capabilities
+  // before the verbatim passthrough. Copilot upstream rejects client-sent
+  // reasoning params that a given model doesn't support (e.g. output_config.effort
+  // on claude-haiku-4.5, or thinking.type "enabled" on adaptive-only models), so
+  // this rewrites them in place to the shape each model accepts.
+  prepareMessagesApiPayload(payload, selectedModel)
 
   c.set("logInfo", {
     model: copilotModelId,
