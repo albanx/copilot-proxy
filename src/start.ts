@@ -14,7 +14,7 @@ import { setupCopilotToken, setupGitHubToken } from "./lib/token"
 import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
 import { server } from "./server"
 
-interface RunServerOptions {
+export interface RunServerOptions {
   port: number
   verbose: boolean
   accountType: string
@@ -25,9 +25,15 @@ interface RunServerOptions {
   claudeCode: boolean
   showToken: boolean
   proxyEnv: boolean
+  /**
+   * Force a fresh GitHub device-flow login instead of reusing the cached token.
+   * The `auth` subcommand sets this so it re-authenticates before booting; the
+   * `start` subcommand leaves it undefined (reuse cached token, as before).
+   */
+  forceGitHubAuth?: boolean
 }
 
-async function runServer(options: RunServerOptions): Promise<void> {
+export async function runServer(options: RunServerOptions): Promise<void> {
   if (options.proxyEnv) {
     initProxyFromEnv()
   }
@@ -57,7 +63,7 @@ async function runServer(options: RunServerOptions): Promise<void> {
     state.githubToken = options.githubToken
     consola.info("Using provided GitHub token")
   } else {
-    await setupGitHubToken()
+    await setupGitHubToken({ force: options.forceGitHubAuth })
   }
 
   await setupCopilotToken()

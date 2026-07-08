@@ -47,7 +47,7 @@ Pre-commit hook (`simple-git-hooks` + `lint-staged`) runs `bun run lint --fix` o
 ```
 src/
   main.ts                       # citty entry; subCommands: { auth, start }
-  auth.ts                       # `auth` subcommand (GitHub device-flow login only)
+  auth.ts                       # `auth` subcommand (forced GitHub re-login, then boots server via start's runServer)
   start.ts                      # `start` subcommand (boots server, owns CLI flags)
   server.ts                     # Hono app; mounts routes at root AND under /v1/
   lib/

@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 
 import { defineCommand } from "citty"
-import consola from "consola"
 
-import { PATHS, ensurePaths } from "./lib/paths"
-import { state } from "./lib/state"
-import { setupGitHubToken } from "./lib/token"
+import { runServer } from "./start"
 
 interface RunAuthOptions {
   verbose: boolean
@@ -13,22 +10,29 @@ interface RunAuthOptions {
 }
 
 async function runAuth(options: RunAuthOptions): Promise<void> {
-  if (options.verbose) {
-    consola.level = 5
-    consola.info("Verbose logging enabled")
-  }
-
-  state.showToken = options.showToken
-
-  await ensurePaths()
-  await setupGitHubToken({ force: true })
-  consola.success("GitHub token written to", PATHS.GITHUB_TOKEN_PATH)
+  // Force a fresh GitHub login, then boot the server exactly like `start` does
+  // (fetch Copilot token + models, then serve). Non-auth options use `start`'s
+  // defaults; `auth` intentionally exposes only `verbose` and `show-token`.
+  await runServer({
+    port: 4141,
+    verbose: options.verbose,
+    accountType: "auto",
+    manual: false,
+    rateLimit: undefined,
+    rateLimitWait: false,
+    githubToken: undefined,
+    claudeCode: false,
+    showToken: options.showToken,
+    proxyEnv: false,
+    forceGitHubAuth: true,
+  })
 }
 
 export const auth = defineCommand({
   meta: {
     name: "auth",
-    description: "Run GitHub auth flow without running the server",
+    description:
+      "Run GitHub auth flow (forced re-login), then fetch models and start the server",
   },
   args: {
     verbose: {
