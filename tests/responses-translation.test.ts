@@ -60,8 +60,64 @@ describe("translateAnthropicMessagesToResponsesPayload", () => {
     expect(out.tool_choice).toBe("auto")
     expect(out.metadata).toBeNull()
     expect(out.instructions).toBeNull()
-    expect(out.reasoning).toEqual({ effort: "high", summary: "detailed" })
+    expect(out.reasoning).toEqual({
+      effort: "xhigh",
+      summary: "auto",
+      context: "all_turns",
+    })
     expect(out.include).toEqual(["reasoning.encrypted_content"])
+  })
+
+  test("prefers the requested output_config reasoning effort", () => {
+    const out = translateAnthropicMessagesToResponsesPayload(
+      mkPayload({ output_config: { effort: "low" } }),
+    )
+    expect(out.reasoning?.effort).toBe("low")
+  })
+
+  test("falls back to the top-level reasoning_effort hint", () => {
+    const out = translateAnthropicMessagesToResponsesPayload(
+      mkPayload({ reasoning_effort: "medium" }),
+    )
+    expect(out.reasoning?.effort).toBe("medium")
+  })
+
+  test("output_config.effort wins over reasoning_effort", () => {
+    const out = translateAnthropicMessagesToResponsesPayload(
+      mkPayload({
+        output_config: { effort: "max" },
+        reasoning_effort: "low",
+      }),
+    )
+    expect(out.reasoning?.effort).toBe("max")
+  })
+
+  test("defaults reasoning effort per model family", () => {
+    const gpt52 = translateAnthropicMessagesToResponsesPayload(
+      mkPayload({ model: "gpt-5.2" }),
+    )
+    expect(gpt52.reasoning?.effort).toBe("high")
+
+    const gpt56 = translateAnthropicMessagesToResponsesPayload(
+      mkPayload({ model: "gpt-5.6-sol" }),
+    )
+    expect(gpt56.reasoning?.effort).toBe("xhigh")
+  })
+
+  test("sends reasoning context all_turns only to models that support it", () => {
+    for (const model of ["gpt-5.4", "gpt-5.4-mini", "gpt-5.5", "gpt-5.6-sol"]) {
+      const out = translateAnthropicMessagesToResponsesPayload(
+        mkPayload({ model }),
+      )
+      expect(out.reasoning?.context).toBe("all_turns")
+    }
+
+    for (const model of ["gpt-5.2", "gpt-5", "claude-opus-4.5"]) {
+      const out = translateAnthropicMessagesToResponsesPayload(
+        mkPayload({ model }),
+      )
+      expect(out.reasoning?.context).toBe("auto")
+    }
   })
 
   test("clamps max_output_tokens up to the 12800 floor", () => {
@@ -98,6 +154,43 @@ describe("translateAnthropicMessagesToResponsesPayload", () => {
       mkPayload({ system: "be nice" }),
     )
     expect(out.instructions).toBe("be nice")
+  })
+
+  test("splits separator-joined thinking back into reasoning summary parts", () => {
+    const out = translateAnthropicMessagesToResponsesPayload(
+      mkPayload({
+        messages: [
+          { role: "user", content: "hi" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "Part one⁣\n\nPart two",
+                signature: "ENC@rs_1",
+              },
+              { type: "text", text: "answer" },
+            ],
+          },
+          { role: "user", content: "next" },
+        ],
+      }),
+    )
+
+    const reasoning = (out.input as Array<{ type?: string }>).find(
+      (item) => item.type === "reasoning",
+    ) as {
+      id: string
+      encrypted_content: string
+      summary: Array<{ type: string; text: string }>
+    }
+
+    expect(reasoning.id).toBe("rs_1")
+    expect(reasoning.encrypted_content).toBe("ENC")
+    expect(reasoning.summary).toEqual([
+      { type: "summary_text", text: "Part one" },
+      { type: "summary_text", text: "Part two" },
+    ])
   })
 
   test("omits prompt_cache_key when there are no tools", () => {
@@ -233,6 +326,35 @@ describe("translateResponsesResultToAnthropic", () => {
     })
   })
 
+  test("surfaces cache_write_tokens as cache_creation_input_tokens", () => {
+    const out = translateResponsesResultToAnthropic(
+      mkResult({
+        output: [
+          {
+            id: "m1",
+            type: "message",
+            role: "assistant",
+            status: "completed",
+            content: [{ type: "output_text", text: "Hi", annotations: [] }],
+          },
+        ],
+        usage: {
+          input_tokens: 100,
+          output_tokens: 20,
+          total_tokens: 120,
+          input_tokens_details: { cached_tokens: 30, cache_write_tokens: 50 },
+        },
+      }),
+    )
+
+    expect(out.usage).toEqual({
+      input_tokens: 20,
+      output_tokens: 20,
+      cache_creation_input_tokens: 50,
+      cache_read_input_tokens: 30,
+    })
+  })
+
   test("maps a function call to a tool_use block with tool_use stop reason", () => {
     const out = translateResponsesResultToAnthropic(
       mkResult({
@@ -286,6 +408,30 @@ describe("translateResponsesResultToAnthropic", () => {
       signature: "ENC@rs_1",
     })
     expect(out.content[1]).toEqual({ type: "text", text: "Answer" })
+  })
+
+  test("joins multi-part reasoning summaries with the invisible separator", () => {
+    const out = translateResponsesResultToAnthropic(
+      mkResult({
+        output: [
+          {
+            id: "rs_1",
+            type: "reasoning",
+            summary: [
+              { type: "summary_text", text: "Part one" },
+              { type: "summary_text", text: "Part two" },
+            ],
+            encrypted_content: "ENC",
+          },
+        ],
+      }),
+    )
+
+    expect(out.content[0]).toEqual({
+      type: "thinking",
+      thinking: "Part one⁣\n\nPart two",
+      signature: "ENC@rs_1",
+    })
   })
 
   test("substitutes default thinking text for an empty reasoning summary", () => {

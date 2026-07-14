@@ -24,7 +24,7 @@ export interface ResponsesPayload {
   stream?: boolean | null
   tools?: Array<ResponsesTool> | null
   tool_choice?: unknown
-  reasoning?: { effort?: string } | null
+  reasoning?: { effort?: string; summary?: string; context?: string } | null
   [key: string]: unknown
 }
 

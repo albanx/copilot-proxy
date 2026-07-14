@@ -16,6 +16,13 @@ import { server } from "./server"
 
 export interface RunServerOptions {
   port: number
+  /**
+   * Interface to bind. Defaults to loopback: this proxy exposes the user's
+   * Copilot subscription with no inbound authentication, so listening on all
+   * interfaces would let anyone on the network consume their quota. Pass
+   * `0.0.0.0` explicitly (e.g. in Docker) to expose it.
+   */
+  host?: string
   verbose: boolean
   accountType: string
   manual: boolean
@@ -73,6 +80,7 @@ export async function runServer(options: RunServerOptions): Promise<void> {
     `Available models: \n${state.models?.data.map((model) => `- ${model.id}`).join("\n")}`,
   )
 
+  const host = options.host?.trim() || "127.0.0.1"
   const serverUrl = `http://localhost:${options.port}`
 
   if (options.claudeCode) {
@@ -119,11 +127,18 @@ export async function runServer(options: RunServerOptions): Promise<void> {
     }
   }
 
-  consola.info(`Listening on ${serverUrl}`)
+  if (host === "0.0.0.0" || host === "::") {
+    consola.warn(
+      `Listening on ALL interfaces (${host}:${options.port}); this proxy has no inbound auth, so anyone on your network can use your Copilot subscription`,
+    )
+  } else {
+    consola.info(`Listening on http://${host}:${options.port}`)
+  }
 
   serve({
     fetch: server.fetch as ServerHandler,
     port: options.port,
+    hostname: host,
     bun: {
       // Disable idle timeout to prevent Bun from closing SSE/streaming connections
       // Default is 10 seconds which kills long-running LLM streams
@@ -143,6 +158,12 @@ export const start = defineCommand({
       type: "string",
       default: "4141",
       description: "Port to listen on",
+    },
+    host: {
+      type: "string",
+      default: "127.0.0.1",
+      description:
+        "Interface to bind (default loopback; use 0.0.0.0 to expose on the network, e.g. in Docker)",
     },
     verbose: {
       alias: "v",
@@ -206,6 +227,7 @@ export const start = defineCommand({
 
     return runServer({
       port: Number.parseInt(args.port, 10),
+      host: args.host,
       verbose: args.verbose,
       accountType: args["account-type"],
       manual: args.manual,

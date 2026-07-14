@@ -10,8 +10,38 @@ import { responsesRoutes } from "./routes/responses/route"
 
 export const server = new Hono()
 
+/**
+ * Origins allowed to call the proxy from a browser.
+ *
+ * The proxy exposes the user's Copilot subscription with no inbound
+ * authentication, so a wildcard `Access-Control-Allow-Origin` would let any
+ * website they happen to visit POST to `localhost:4141`, spend their quota and
+ * read the model's replies (a JSON POST preflights, and a wildcard policy
+ * approves it). Binding to loopback does not help — the browser runs on the
+ * same machine.
+ *
+ * Non-browser clients (Claude Code, curl, the OpenAI/Anthropic SDKs) send no
+ * `Origin` header and do not enforce CORS, so they are unaffected by this.
+ */
+const isAllowedOrigin = (origin: string): string | null => {
+  let hostname: string
+  try {
+    hostname = new URL(origin).hostname
+  } catch {
+    return null
+  }
+
+  const isLoopback =
+    hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "[::1]"
+    || hostname === "::1"
+
+  return isLoopback ? origin : null
+}
+
 server.use(requestLogger())
-server.use(cors())
+server.use(cors({ origin: isAllowedOrigin }))
 
 server.get("/", (c) => c.text("Server running"))
 

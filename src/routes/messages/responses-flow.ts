@@ -17,6 +17,7 @@ import {
   type ResponsesPayload as LocalResponsesPayload,
 } from "~/services/copilot/create-responses"
 import {
+  type ResponsesPayload,
   type ResponsesResult,
   type ResponseStreamEvent,
 } from "~/services/copilot/create-responses-types"
@@ -35,6 +36,40 @@ import {
 
 interface ResponsesFlowOptions {
   selectedModel?: Model
+}
+
+/**
+ * Clamp the resolved reasoning effort to the model's advertised
+ * `reasoning_effort` ladder (same convention as the native `/v1/messages`
+ * preprocessor): fold the two lowest tiers up to "low", and snap anything the
+ * model doesn't accept to its highest advertised level. Models that advertise
+ * no ladder keep the requested effort untouched (upstream ignores it there).
+ */
+const snapReasoningEffortToModel = (
+  responsesPayload: ResponsesPayload,
+  selectedModel?: Model,
+): void => {
+  const reasoning = responsesPayload.reasoning
+  if (!reasoning?.effort) {
+    return
+  }
+
+  if (reasoning.effort === "none" || reasoning.effort === "minimal") {
+    reasoning.effort = "low"
+  }
+
+  const effortLevels = selectedModel?.capabilities.supports?.reasoning_effort
+  if (
+    effortLevels
+    && effortLevels.length > 0
+    && !effortLevels.includes(reasoning.effort)
+  ) {
+    const snapped = effortLevels.at(-1) as typeof reasoning.effort
+    consola.debug(
+      `Requested reasoning effort "${reasoning.effort}" not supported by ${responsesPayload.model}; snapping to "${snapped}"`,
+    )
+    reasoning.effort = snapped
+  }
 }
 
 /**
@@ -62,6 +97,8 @@ export const handleWithResponsesApi = async (
 
   const responsesPayload =
     translateAnthropicMessagesToResponsesPayload(anthropicPayload)
+
+  snapReasoningEffortToModel(responsesPayload, selectedModel)
 
   applyResponsesApiContextManagement(
     responsesPayload,
@@ -104,6 +141,17 @@ export const handleWithResponsesApi = async (
     consola.debug("Streaming response from Copilot (Responses API)")
     return streamSSE(c, async (stream) => {
       const streamState = createResponsesStreamState({ toolSearchName })
+      const streamStart = Date.now()
+      let firstEventAt: number | undefined
+      let finalUsage:
+        | {
+            input_tokens?: number
+            output_tokens: number
+            cache_read_input_tokens?: number
+            cache_creation_input_tokens?: number
+          }
+        | undefined
+      let stopReason: string | undefined
 
       for await (const chunk of events(response)) {
         const eventName = chunk.event
@@ -123,6 +171,16 @@ export const handleWithResponsesApi = async (
           streamState,
         )
         for (const event of translatedEvents) {
+          if (firstEventAt === undefined) {
+            firstEventAt = Date.now()
+            consola.info(
+              `TTFT: ${firstEventAt - streamStart}ms (${responsesPayload.model}, effort=${responsesPayload.reasoning?.effort ?? "-"})`,
+            )
+          }
+          if (event.type === "message_delta") {
+            finalUsage = event.usage ?? finalUsage
+            stopReason = event.delta.stop_reason ?? stopReason
+          }
           await stream.writeSSE({
             event: event.type,
             data: JSON.stringify(event),
@@ -134,6 +192,16 @@ export const handleWithResponsesApi = async (
           break
         }
       }
+
+      // The request-logger middleware has already printed its line by the time
+      // usage arrives mid-stream, so emit the stream summary separately.
+      const usageSummary =
+        finalUsage ?
+          ` tokens=${finalUsage.input_tokens ?? "?"}/${finalUsage.output_tokens} cache=${finalUsage.cache_read_input_tokens ?? 0}r/${finalUsage.cache_creation_input_tokens ?? 0}w`
+        : ""
+      consola.info(
+        `Stream complete: ${responsesPayload.model} ${Date.now() - streamStart}ms stop=${stopReason ?? "?"}${usageSummary}`,
+      )
 
       if (!streamState.messageCompleted) {
         consola.warn(
@@ -164,6 +232,9 @@ export const handleWithResponsesApi = async (
   // never reach the middleware).
   logInfo.inputTokens = anthropicResponse.usage.input_tokens
   logInfo.outputTokens = anthropicResponse.usage.output_tokens
+  logInfo.cacheReadTokens = anthropicResponse.usage.cache_read_input_tokens
+  logInfo.cacheWriteTokens = anthropicResponse.usage.cache_creation_input_tokens
+  logInfo.stopReason = anthropicResponse.stop_reason ?? undefined
   consola.debug(
     "Translated Anthropic response:",
     JSON.stringify(anthropicResponse),

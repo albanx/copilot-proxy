@@ -5,7 +5,7 @@
 //   - WebSocket transport OFF (no WS infrastructure here -> HTTP-only routing)
 //   - no per-model compaction override (falls back to ratio-based threshold)
 //   - no extra system prompt injection
-//   - "high" reasoning effort (upstream default for non-gpt5.3+ models)
+//   - "xhigh" reasoning effort for gpt-5.3+, "high" otherwise (upstream default)
 
 export type ReasoningEffort =
   | "none"
@@ -15,6 +15,34 @@ export type ReasoningEffort =
   | "high"
   | "xhigh"
   | "max"
+
+const GPT_MODEL_PATTERN = /^gpt-(\d+)(?:\.(\d+))?/
+
+const isGptVersionAtLeast = (
+  model: string,
+  minimumMajor: number,
+  minimumMinor: number,
+): boolean => {
+  const match = GPT_MODEL_PATTERN.exec(model)
+  if (!match) {
+    return false
+  }
+  const majorVersion = Number.parseInt(match[1], 10)
+  if (majorVersion > minimumMajor) {
+    return true
+  }
+  if (majorVersion !== minimumMajor) {
+    return false
+  }
+  const minorVersion = match[2] ? Number.parseInt(match[2], 10) : 0
+  return minorVersion >= minimumMinor
+}
+
+export const isGpt53OrAbove = (model: string): boolean =>
+  isGptVersionAtLeast(model, 5, 3)
+
+export const isGpt56OrAbove = (model: string): boolean =>
+  isGptVersionAtLeast(model, 5, 6)
 
 export const isResponsesApiContextManagementEnabled = (): boolean => true
 
@@ -26,6 +54,5 @@ export const getModelResponsesApiCompactThreshold = (
 
 export const getExtraPromptForModel = (_model: string): string => ""
 
-export const getReasoningEffortForModel = (
-  _model: string,
-): ReasoningEffort => "high"
+export const getReasoningEffortForModel = (model: string): ReasoningEffort =>
+  isGpt53OrAbove(model) ? "xhigh" : "high"

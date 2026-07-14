@@ -13,6 +13,11 @@ export interface RequestLogInfo {
   account?: string
   inputTokens?: number
   outputTokens?: number
+  // Prompt-cache token counts reported by upstream (read = cache hits,
+  // write = tokens newly written to the cache).
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  stopReason?: string
   note?: string
   // Reasoning / thinking parameters actually applied for this request.
   reasoningEffort?: string
@@ -71,6 +76,11 @@ export const requestLogger = (): MiddlewareHandler => {
       params.push(`ctx=${info.contextWindow}`)
     if (info.inputTokens !== undefined)
       params.push(`tokens=${info.inputTokens}/${info.outputTokens ?? 0}`)
+    if (info.cacheReadTokens !== undefined || info.cacheWriteTokens !== undefined)
+      params.push(
+        `cache=${info.cacheReadTokens ?? 0}r/${info.cacheWriteTokens ?? 0}w`,
+      )
+    if (info.stopReason) params.push(`stop=${info.stopReason}`)
     if (info.note) params.push(`note="${info.note}"`)
 
     const duration = `${DIM}${durationMs}ms${RESET}`

@@ -35,6 +35,7 @@ Useful flags:
 
 ```sh
 npx copilot-bridge start --port 8080                  # custom port
+npx copilot-bridge start --host 0.0.0.0               # expose on the network (default: loopback only)
 npx copilot-bridge start --account-type business      # force business / enterprise (default: auto-detect)
 npx copilot-bridge start --rate-limit 30 --wait       # throttle requests
 npx copilot-bridge start --manual                     # approve each request
@@ -101,6 +102,16 @@ Sample (Anthropic-only, lets `/model` switch freely):
 
 To pin a specific model instead, add `"ANTHROPIC_MODEL": "claude-opus-4.6"` (or any ID returned by `GET /v1/models`) inside `env`.
 
+#### Reasoning effort
+
+The proxy honors the reasoning effort your client requests, on every routing path:
+
+- Claude Code's `"effortLevel"` setting (or `output_config.effort` / a top-level `reasoning_effort` sent by any client) is forwarded to Copilot.
+- The value is clamped to the effort ladder each model actually advertises (e.g. a model without `xhigh` gets its highest supported level instead of a 400).
+- When the client sends nothing, the proxy imitates the VS Code Copilot extension's defaults: `xhigh` for GPT-5.3+ models, `high` otherwise.
+
+The effort actually applied is printed on each request log line (`effort=…`).
+
 Or use the interactive helper, which prompts for models and copies the full launch command to your clipboard:
 
 ```sh
@@ -112,6 +123,7 @@ npx copilot-bridge start --claude-code
 | Option           | Description                                                    | Default      | Alias |
 | ---------------- | -------------------------------------------------------------- | ------------ | ----- |
 | `--port`         | Port to listen on                                              | `4141`       | `-p`  |
+| `--host`         | Interface to bind (`0.0.0.0` to expose on the network/Docker)  | `127.0.0.1`  |       |
 | `--verbose`      | Verbose logging                                                | `false`      | `-v`  |
 | `--account-type` | `auto`, `individual`, `business`, or `enterprise`              | `auto`       | `-a`  |
 | `--manual`       | Approve each request manually                                  | `false`      |       |
@@ -145,6 +157,15 @@ Notes:
 - All endpoints are also mounted without the `/v1` prefix.
 - Both `/v1/chat/completions` and `/v1/messages` accept any model exposed by Copilot — pick a Claude (`claude-opus-4.6`, `claude-sonnet-4.5`, …) or non-Claude (`gpt-4.1`, `gpt-5`, …) model from `/v1/models`. The `/v1/messages` route auto-translates Anthropic-style model IDs (e.g. `claude-sonnet-4-5-20250929`) into Copilot's dotted form, and passes Copilot-native IDs through unchanged.
 - Account type is auto-detected from the Copilot token (individual / business / enterprise). Override with `--account-type` only if detection is wrong.
+
+## Security
+
+This proxy hands out your GitHub Copilot subscription to whoever can reach it — **there is no inbound authentication**. Two defaults protect you:
+
+- **It binds to loopback (`127.0.0.1`) only.** Nothing on your network can reach it. Pass `--host 0.0.0.0` to expose it deliberately (Docker, LAN); the server prints a warning when you do, and you should put it behind a reverse proxy that authenticates.
+- **Browser requests are restricted to loopback origins.** Without this, any website you visited while the proxy was running could POST to `localhost:4141` from your browser, burn your quota and read the replies. Command-line clients (Claude Code, curl, the OpenAI/Anthropic SDKs) send no `Origin` header and are unaffected.
+
+Your GitHub token is cached at `~/.local/share/copilot-api/github_token` with `0600` permissions. `--show-token` prints tokens to the console — only use it when debugging, and don't paste the output anywhere.
 
 ## Tips
 

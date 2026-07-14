@@ -12,6 +12,7 @@ import type {
 import { COMPACT_REQUEST, type CompactType } from "~/lib/compact"
 import {
   getModelResponsesApiCompactThreshold as getConfiguredModelResponsesApiCompactThreshold,
+  isGpt56OrAbove,
   isResponsesApiContextManagementEnabled as isConfiguredResponsesApiContextManagementEnabled,
   isResponsesApiWebSocketEnabled as isConfiguredResponsesApiWebSocketEnabled,
 } from "~/lib/config"
@@ -23,6 +24,7 @@ export const DEFAULT_RESPONSES_COMPACT_THRESHOLD_RATIO = 0.9
 export const responsesUtilsDependencies = {
   getModelResponsesApiCompactThreshold:
     getConfiguredModelResponsesApiCompactThreshold,
+  isGpt56OrAbove,
   isResponsesApiContextManagementEnabled:
     isConfiguredResponsesApiContextManagementEnabled,
   isResponsesApiWebSocketEnabled: isConfiguredResponsesApiWebSocketEnabled,
@@ -300,6 +302,12 @@ export const applyResponsesApiContextManagement = (
   maxPromptTokens?: number,
   compactThresholdRatio = DEFAULT_RESPONSES_COMPACT_THRESHOLD_RATIO,
 ): void => {
+  // GPT-5.6+ manages context server-side; injecting a compaction item there
+  // would fragment the prompt cache and defeat cache hits.
+  if (responsesUtilsDependencies.isGpt56OrAbove(payload.model)) {
+    return
+  }
+
   if (hasTerminalCompactionTrigger(payload)) {
     return
   }

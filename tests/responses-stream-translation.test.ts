@@ -359,3 +359,134 @@ describe("buildErrorEvent", () => {
     })
   })
 })
+
+describe("multi-part reasoning summary streaming", () => {
+  const summaryDelta = (
+    summaryIndex: number,
+    delta: string,
+  ): ResponseStreamEvent => ({
+    type: "response.reasoning_summary_text.delta",
+    delta,
+    item_id: "rs_1",
+    output_index: 0,
+    sequence_number: 1,
+    summary_index: summaryIndex,
+  })
+
+  const summaryPartAdded = (summaryIndex: number): ResponseStreamEvent => ({
+    type: "response.reasoning_summary_part.added",
+    item_id: "rs_1",
+    output_index: 0,
+    part: { type: "summary_text", text: "" },
+    sequence_number: 1,
+    summary_index: summaryIndex,
+  })
+
+  test("emits the invisible separator between summary parts", () => {
+    const state = createResponsesStreamState()
+
+    const first = translateResponsesStreamEvent(summaryPartAdded(0), state)
+    expect(
+      first.filter((event) => event.type === "content_block_delta"),
+    ).toEqual([])
+
+    translateResponsesStreamEvent(summaryDelta(0, "Part one"), state)
+
+    const second = translateResponsesStreamEvent(summaryPartAdded(1), state)
+    expect(second).toEqual([
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "⁣\n\n" },
+      },
+    ])
+
+    const partTwo = translateResponsesStreamEvent(
+      summaryDelta(1, "Part two"),
+      state,
+    )
+    expect(partTwo).toEqual([
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "Part two" },
+      },
+    ])
+  })
+
+  test("does not re-emit summary text on done for a part that streamed deltas", () => {
+    const state = createResponsesStreamState()
+    translateResponsesStreamEvent(summaryDelta(0, "Part one"), state)
+
+    const out = translateResponsesStreamEvent(
+      {
+        type: "response.reasoning_summary_text.done",
+        item_id: "rs_1",
+        output_index: 0,
+        sequence_number: 2,
+        summary_index: 0,
+        text: "Part one",
+      },
+      state,
+    )
+    expect(out).toEqual([])
+  })
+
+  test("emits the full text on done for a part that never streamed deltas", () => {
+    const state = createResponsesStreamState()
+    translateResponsesStreamEvent(summaryDelta(0, "Part one"), state)
+
+    const out = translateResponsesStreamEvent(
+      {
+        type: "response.reasoning_summary_text.done",
+        item_id: "rs_1",
+        output_index: 0,
+        sequence_number: 2,
+        summary_index: 1,
+        text: "Part two",
+      },
+      state,
+    )
+    expect(out).toEqual([
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "thinking_delta", thinking: "Part two" },
+      },
+    ])
+  })
+
+  test("skips the placeholder thinking text when the block already streamed deltas", () => {
+    const state = createResponsesStreamState()
+    translateResponsesStreamEvent(summaryDelta(0, "Real thinking"), state)
+
+    const out = translateResponsesStreamEvent(
+      {
+        type: "response.output_item.done",
+        output_index: 0,
+        sequence_number: 3,
+        item: {
+          id: "rs_1",
+          type: "reasoning",
+          summary: [],
+          encrypted_content: "ENC",
+        },
+      },
+      state,
+    )
+
+    expect(out).toEqual([
+      {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "signature_delta", signature: "ENC@rs_1" },
+      },
+    ])
+  })
+
+  test("ignores empty reasoning summary deltas", () => {
+    const state = createResponsesStreamState()
+    const out = translateResponsesStreamEvent(summaryDelta(0, ""), state)
+    expect(out).toEqual([])
+  })
+})

@@ -93,6 +93,7 @@ export interface Reasoning {
     | "max"
     | null
   summary?: "auto" | "concise" | "detailed" | null
+  context?: "auto" | "current_turn" | "all_turns" | null
 }
 
 export interface ResponseContextManagementCompactionItem {
@@ -335,6 +336,8 @@ export interface ResponseUsage {
   total_tokens: number
   input_tokens_details?: {
     cached_tokens: number
+    /** Tokens written to the prompt cache (Anthropic cache_creation equivalent). */
+    cache_write_tokens?: number
   }
   output_tokens_details?: {
     reasoning_tokens: number

@@ -7,6 +7,7 @@ import { streamSSE } from "hono/streaming"
 import { copilotBaseUrl } from "~/lib/api-config"
 import { awaitApproval } from "~/lib/approval"
 import { checkRateLimit } from "~/lib/rate-limit"
+import { type RequestLogInfo } from "~/lib/request-logger"
 import { state } from "~/lib/state"
 import { getTokenCount } from "~/lib/tokenizer"
 import { getResponsesTransportForModel } from "~/routes/responses/utils"
@@ -21,6 +22,7 @@ import {
 
 import {
   type AnthropicMessagesPayload,
+  type AnthropicResponse,
   type AnthropicStreamState,
 } from "./anthropic-types"
 import {
@@ -94,7 +96,7 @@ async function handleNativeMessages(
   // this rewrites them in place to the shape each model accepts.
   prepareMessagesApiPayload(payload, selectedModel)
 
-  c.set("logInfo", {
+  const logInfo: RequestLogInfo = {
     model: copilotModelId,
     sourceModel: anthropicPayload.model,
     upstream: `${copilotBaseUrl(state)}/v1/messages`,
@@ -103,9 +105,14 @@ async function handleNativeMessages(
     tools: payload.tools?.length ?? 0,
     responseFormat: payload.stream ? "sse" : "json",
     account: state.accountType,
+    // Post-preprocess values: what is actually sent upstream after capability
+    // gating, not what the client originally asked for.
+    reasoningEffort: payload.output_config?.effort ?? undefined,
+    thinkingBudget: payload.thinking?.budget_tokens ?? undefined,
     contextWindow:
       selectedModel?.capabilities.limits?.max_context_window_tokens,
-  })
+  }
+  c.set("logInfo", logInfo)
 
   const response = await createMessages(payload, {
     anthropicBeta: c.req.header("anthropic-beta"),
@@ -115,6 +122,10 @@ async function handleNativeMessages(
   if (response instanceof Response) {
     consola.debug("Streaming response from Copilot /v1/messages")
     return streamSSE(c, async (stream) => {
+      const streamStart = Date.now()
+      let usageSummary = ""
+      let stopReason: string | undefined
+
       for await (const rawEvent of events(response)) {
         if (rawEvent.data === "[DONE]") {
           break
@@ -122,12 +133,32 @@ async function handleNativeMessages(
         if (!rawEvent.data) {
           continue
         }
-        const parsed = JSON.parse(rawEvent.data) as { type?: string }
+        const parsed = JSON.parse(rawEvent.data) as {
+          type?: string
+          delta?: { stop_reason?: string | null }
+          usage?: {
+            input_tokens?: number
+            output_tokens?: number
+            cache_read_input_tokens?: number
+            cache_creation_input_tokens?: number
+          }
+        }
+        if (parsed.type === "message_delta") {
+          const usage = parsed.usage
+          if (usage) {
+            usageSummary = ` tokens=${usage.input_tokens ?? "?"}/${usage.output_tokens ?? 0} cache=${usage.cache_read_input_tokens ?? 0}r/${usage.cache_creation_input_tokens ?? 0}w`
+          }
+          stopReason = parsed.delta?.stop_reason ?? stopReason
+        }
         await stream.writeSSE({
           event: parsed.type ?? "message",
           data: rawEvent.data,
         })
       }
+
+      consola.info(
+        `Stream complete: ${copilotModelId} ${Date.now() - streamStart}ms stop=${stopReason ?? "?"}${usageSummary}`,
+      )
     })
   }
 
@@ -136,6 +167,13 @@ async function handleNativeMessages(
     "Non-streaming response from Copilot /v1/messages:",
     JSON.stringify(response).slice(-400),
   )
+  const usage = (response as { usage?: AnthropicResponse["usage"] }).usage
+  if (usage) {
+    logInfo.inputTokens = usage.input_tokens
+    logInfo.outputTokens = usage.output_tokens
+    logInfo.cacheReadTokens = usage.cache_read_input_tokens
+    logInfo.cacheWriteTokens = usage.cache_creation_input_tokens
+  }
   return c.json(response)
 }
 

@@ -15,6 +15,7 @@ import { HTTPError } from "~/lib/error"
 import {
   getExtraPromptForModel,
   getReasoningEffortForModel,
+  isGpt56OrAbove,
 } from "~/lib/config"
 import { requestContext } from "~/lib/request-context"
 import { parseUserIdMetadata } from "~/lib/utils"
@@ -71,6 +72,25 @@ const COMPACTION_SIGNATURE_PREFIX = "cm1#"
 const COMPACTION_SIGNATURE_SEPARATOR = "@"
 
 export const THINKING_TEXT = "Thinking..."
+
+/**
+ * Joins the parts of a multi-part reasoning summary into the single `thinking`
+ * string Anthropic clients see, and splits it back into `summary_text` parts
+ * when the client replays the block. Invisible separator (U+2063) so the
+ * round-trip is lossless without polluting the visible thinking text.
+ */
+export const REASONING_SUMMARY_SEPARATOR = "⁣\n\n"
+
+/**
+ * Reasoning effort priority: the client's explicit request wins. Claude Code
+ * sends `output_config.effort`; some other clients send a top-level
+ * `reasoning_effort` hint. Only when neither is present do we fall back to the
+ * per-model default ("xhigh" for gpt-5.3+, "high" otherwise).
+ */
+const resolveReasoningEffort = (payload: AnthropicMessagesPayload) =>
+  payload.output_config?.effort
+  ?? payload.reasoning_effort
+  ?? getReasoningEffortForModel(payload.model)
 
 const buildPromptCacheKey = (
   basePromptCacheKey: string | null,
@@ -149,8 +169,9 @@ export const translateAnthropicMessagesToResponsesPayload = (
     store: false,
     parallel_tool_calls: true,
     reasoning: {
-      effort: getReasoningEffortForModel(payload.model),
-      summary: "detailed",
+      effort: resolveReasoningEffort(payload),
+      summary: "auto",
+      context: isSupportAllTurns(payload) ? "all_turns" : "auto",
     },
     include: ["reasoning.encrypted_content"],
   }
@@ -448,9 +469,26 @@ const createReasoningContent = (
   return {
     id,
     type: "reasoning",
-    summary: thinking ? [{ type: "summary_text", text: thinking }] : [],
+    summary: createReasoningSummary(thinking),
     encrypted_content: encryptedContent,
   }
+}
+
+const createReasoningSummary = (
+  thinking: string,
+): ResponseInputReasoning["summary"] => {
+  if (thinking.length === 0) {
+    return []
+  }
+
+  if (!thinking.includes(REASONING_SUMMARY_SEPARATOR)) {
+    return [{ type: "summary_text", text: thinking }]
+  }
+
+  return thinking.split(REASONING_SUMMARY_SEPARATOR).map((text) => ({
+    type: "summary_text",
+    text,
+  }))
 }
 
 const createCompactionContent = (
@@ -946,7 +984,7 @@ const extractReasoningText = (item: ResponseOutputReasoning): string => {
 
   collectFromBlocks(item.summary)
 
-  return segments.join("").trim()
+  return segments.join(REASONING_SUMMARY_SEPARATOR).trim()
 }
 
 const createToolUseContentBlock = (
@@ -1100,10 +1138,18 @@ const mapResponsesUsage = (
   const inputTokens = response.usage?.input_tokens ?? 0
   const outputTokens = response.usage?.output_tokens ?? 0
   const inputCachedTokens = response.usage?.input_tokens_details?.cached_tokens
+  const cacheWriteTokens =
+    response.usage?.input_tokens_details?.cache_write_tokens ?? 0
 
   return {
-    input_tokens: inputTokens - (inputCachedTokens ?? 0),
+    input_tokens: Math.max(
+      0,
+      inputTokens - (inputCachedTokens ?? 0) - cacheWriteTokens,
+    ),
     output_tokens: outputTokens,
+    ...(cacheWriteTokens > 0 && {
+      cache_creation_input_tokens: cacheWriteTokens,
+    }),
     ...(response.usage?.input_tokens_details?.cached_tokens !== undefined && {
       cache_read_input_tokens:
         response.usage.input_tokens_details.cached_tokens,
@@ -1164,4 +1210,19 @@ const convertToolResultContent = (
   }
 
   return ""
+}
+
+/**
+ * Only newer GPT reasoning models accept `reasoning.context: "all_turns"`
+ * (cross-turn reasoning reuse); older ones reject it, so fall back to "auto".
+ */
+const isSupportAllTurns = (payload: AnthropicMessagesPayload): boolean => {
+  if (
+    payload.model === "gpt-5.4"
+    || payload.model === "gpt-5.4-mini"
+    || payload.model === "gpt-5.5"
+  ) {
+    return true
+  }
+  return isGpt56OrAbove(payload.model)
 }

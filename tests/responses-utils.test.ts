@@ -171,6 +171,14 @@ describe("applyResponsesApiContextManagement", () => {
       { type: "compaction", compact_threshold: 180_000 },
     ])
   })
+
+  test("skips injection for gpt-5.6+ models to preserve cache hits", () => {
+    for (const model of ["gpt-5.6", "gpt-5.6-sol", "gpt-5.7", "gpt-6"]) {
+      const payload = mkPayload({ model, input: [] })
+      applyResponsesApiContextManagement(payload, 100_000)
+      expect(payload.context_management).toBeUndefined()
+    }
+  })
 })
 
 describe("compactInputByLatestCompaction", () => {
