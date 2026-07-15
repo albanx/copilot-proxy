@@ -15,7 +15,16 @@ const USER_AGENT = `GitHubCopilotChat/${COPILOT_VERSION}`
 const CLAUDE_AGENT_USER_AGENT =
   "vscode_claude_code/2.1.112 (external, sdk-ts, agent-sdk/0.2.112)"
 
-const API_VERSION = "2025-04-01"
+// Version header sent to the Copilot inference API (api.githubcopilot.com).
+// Bumped to match the newer Copilot Chat extension / opencode, which unlocks
+// current model behaviors on the /chat/completions, /responses and /v1/messages
+// routes. Only affects inference calls.
+const COPILOT_API_VERSION = "2026-06-01"
+// Version header sent to GitHub's REST API (api.github.com) for the Copilot
+// token exchange and user lookup. Deliberately left on the known-good value:
+// that path is the one whose failure would break auth entirely, and it is not
+// what opencode changed. Bump only after verifying the token endpoint accepts it.
+const GITHUB_API_VERSION = "2025-04-01"
 
 export const copilotBaseUrl = (state: State) =>
   state.accountType === "individual" ?
@@ -30,7 +39,7 @@ export const copilotHeaders = (state: State, vision: boolean = false) => {
     "editor-plugin-version": EDITOR_PLUGIN_VERSION,
     "user-agent": USER_AGENT,
     "openai-intent": "conversation-panel",
-    "x-github-api-version": API_VERSION,
+    "x-github-api-version": COPILOT_API_VERSION,
     "x-request-id": randomUUID(),
     "x-vscode-user-agent-library-version": "electron-fetch",
   }
@@ -70,7 +79,7 @@ export const githubHeaders = (state: State) => ({
   "editor-version": `vscode/${state.vsCodeVersion}`,
   "editor-plugin-version": EDITOR_PLUGIN_VERSION,
   "user-agent": USER_AGENT,
-  "x-github-api-version": API_VERSION,
+  "x-github-api-version": GITHUB_API_VERSION,
   "x-vscode-user-agent-library-version": "electron-fetch",
 })
 

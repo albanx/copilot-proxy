@@ -106,6 +106,96 @@ describe("prepareMessagesApiPayload — non-adaptive models", () => {
   })
 })
 
+describe("prepareMessagesApiPayload — sampling params", () => {
+  test("drops top_p when both temperature and top_p are set (claude 400 repro)", () => {
+    const payload = mkPayload({
+      model: "claude-haiku-4.5",
+      temperature: 1,
+      top_p: 0.9,
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.temperature).toBe(1)
+    expect(payload.top_p).toBeUndefined()
+  })
+
+  test("keeps top_p when temperature is not set", () => {
+    const payload = mkPayload({ model: "claude-haiku-4.5", top_p: 0.9 })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.top_p).toBe(0.9)
+  })
+
+  test("keeps temperature when top_p is not set", () => {
+    const payload = mkPayload({ model: "claude-haiku-4.5", temperature: 0.5 })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.temperature).toBe(0.5)
+  })
+
+  test("reconciles sampling params on adaptive models too", () => {
+    const payload = mkPayload({
+      model: "claude-sonnet-4.5",
+      temperature: 1,
+      top_p: 0.8,
+    })
+    prepareMessagesApiPayload(
+      payload,
+      mkModel({ adaptive_thinking: true, reasoning_effort: ["low", "high"] }),
+    )
+
+    expect(payload.top_p).toBeUndefined()
+  })
+})
+
+describe("prepareMessagesApiPayload — unsupported tool fields", () => {
+  test("strips eager_input_streaming from tool definitions (shim 'Extra inputs' repro)", () => {
+    const payload = mkPayload({
+      model: "claude-haiku-4.5",
+      tools: [
+        {
+          name: "read_file",
+          description: "Read a file",
+          input_schema: { type: "object", properties: {} },
+          // Field Claude Code's fine-grained tool streaming attaches.
+          eager_input_streaming: true,
+        } as never,
+      ],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    const tool = payload.tools?.[0] as unknown as Record<string, unknown>
+    expect("eager_input_streaming" in tool).toBe(false)
+    // The legitimate tool fields survive untouched.
+    expect(tool.name).toBe("read_file")
+    expect(tool.description).toBe("Read a file")
+    expect(tool.input_schema).toEqual({ type: "object", properties: {} })
+  })
+
+  test("leaves clean tool definitions unchanged", () => {
+    const payload = mkPayload({
+      model: "claude-haiku-4.5",
+      tools: [
+        {
+          name: "read_file",
+          input_schema: { type: "object", properties: {} },
+        },
+      ],
+    })
+    prepareMessagesApiPayload(payload, mkModel({}))
+
+    expect(payload.tools).toEqual([
+      { name: "read_file", input_schema: { type: "object", properties: {} } },
+    ])
+  })
+
+  test("is a no-op when there are no tools", () => {
+    const payload = mkPayload({ model: "claude-haiku-4.5" })
+    expect(() => prepareMessagesApiPayload(payload, mkModel({}))).not.toThrow()
+    expect(payload.tools).toBeUndefined()
+  })
+})
+
 describe("prepareMessagesApiPayload — adaptive models", () => {
   test("rewrites enabled thinking to adaptive and sets output_config.effort (enabled 400 repro)", () => {
     const payload = mkPayload({

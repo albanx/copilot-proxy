@@ -55,6 +55,39 @@ const shouldSummarizeThinkingDisplayForModel = (model: string): boolean => {
 const THINKING_PLACEHOLDER = "Thinking..."
 
 /**
+ * Copilot's native `/v1/messages` rejects a request that sets BOTH `temperature`
+ * and `top_p` for Claude models ("temperature and top_p cannot both be specified
+ * for this model. Please use only one."). Claude Code sends both, so keep
+ * `temperature` — the sampling control Anthropic treats as primary, and the one
+ * extended thinking pins to 1 — and drop `top_p`. Mutates `payload` in place.
+ */
+const reconcileSamplingParams = (payload: AnthropicMessagesPayload): void => {
+  if (payload.temperature !== undefined && payload.top_p !== undefined) {
+    delete payload.top_p
+  }
+}
+
+/**
+ * Copilot's native `/v1/messages` shim rejects unknown fields on tool
+ * definitions with "Extra inputs are not permitted". Claude Code's fine-grained
+ * tool streaming attaches `eager_input_streaming` to each tool, and the shim has
+ * not adopted it, so strip it before forwarding. (opencode hits the same
+ * rejection and disables the field at the SDK; here it arrives from the client,
+ * so we remove it on the way through.) Mutates `payload` in place; a no-op when
+ * the field is absent.
+ */
+const stripUnsupportedToolFields = (payload: AnthropicMessagesPayload): void => {
+  if (!Array.isArray(payload.tools)) {
+    return
+  }
+  for (const tool of payload.tools) {
+    if (tool && typeof tool === "object" && "eager_input_streaming" in tool) {
+      delete (tool as Record<string, unknown>).eager_input_streaming
+    }
+  }
+}
+
+/**
  * Strip assistant `thinking` blocks from the message history that Copilot's
  * native `/v1/messages` endpoint would reject with
  * `messages.<n>.content.<m>: Invalid signature in thinking block`.
@@ -99,8 +132,10 @@ const filterAssistantThinkingBlocks = (
  *
  * Faithful port of caozhiyuan/copilot-api's `prepareMessagesApiPayload`
  * (reasoning/thinking gating only — the upstream cache-control / eager-input /
- * thinking-block-filter helpers are separate concerns not ported here). Without
- * this step the passthrough forwards client-sent `thinking` / `output_config`
+ * thinking-block-filter helpers are separate concerns not ported here), plus a
+ * `temperature`/`top_p` reconciliation and an unsupported-tool-field strip
+ * Copilot's shim requires. Without this step the passthrough forwards
+ * client-sent `thinking` / `output_config` / sampling params / tool fields
  * verbatim, which Copilot upstream rejects per-model, e.g.:
  *   - `output_config.effort "high" … claude-haiku-4.5 does not support
  *     reasoning effort` (a non-adaptive model receiving an effort hint), and
@@ -123,6 +158,12 @@ export const prepareMessagesApiPayload = (
   // rejects, independent of the reasoning-config gating below. Runs first so it
   // applies on every branch (adaptive, non-adaptive, and unknown-model).
   filterAssistantThinkingBlocks(payload)
+
+  // Reconcile temperature/top_p and drop tool fields Copilot's shim rejects,
+  // before any branch returns, so both apply to every model routed through the
+  // native passthrough.
+  reconcileSamplingParams(payload)
+  stripUnsupportedToolFields(payload)
 
   // Whether the client sent any thinking config *before* we mutate it — gates
   // the default `display = "summarized"` in the adaptive branch.
